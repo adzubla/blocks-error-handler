@@ -74,24 +74,54 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     private static String codeFor(Exception ex) {
-        return switch (ex) {
-            case HttpRequestMethodNotSupportedException e -> ErrorCode.METHOD_NOT_ALLOWED.name();
-            case HttpMediaTypeNotSupportedException e -> ErrorCode.UNSUPPORTED_MEDIA_TYPE.name();
-            case HttpMediaTypeNotAcceptableException e -> ErrorCode.NOT_ACCEPTABLE.name();
-            case MissingPathVariableException e -> ErrorCode.MISSING_PATH_VARIABLE.name();
-            case MissingServletRequestParameterException e -> ErrorCode.MISSING_REQUEST_PARAMETER.name();
-            case MissingServletRequestPartException e -> ErrorCode.MISSING_REQUEST_PART.name();
-            case ServletRequestBindingException e -> ErrorCode.REQUEST_BINDING_ERROR.name();
-            case NoResourceFoundException e -> ErrorCode.ROUTE_NOT_FOUND.name();
-            case NoHandlerFoundException e -> ErrorCode.ROUTE_NOT_FOUND.name();
-            case AsyncRequestTimeoutException e -> ErrorCode.REQUEST_TIMEOUT.name();
-            case MaxUploadSizeExceededException e -> ErrorCode.PAYLOAD_TOO_LARGE.name();
-            case ConversionNotSupportedException e -> ErrorCode.CONVERSION_NOT_SUPPORTED.name();
-            case TypeMismatchException e -> ErrorCode.PARAMETER_TYPE_MISMATCH.name();
-            case HttpMessageNotWritableException e -> ErrorCode.MESSAGE_NOT_WRITABLE.name();
-            case HandlerMethodValidationException e -> ErrorCode.VALIDATION_FAILED.name();
-            case MethodValidationException e -> ErrorCode.METHOD_VALIDATION_ERROR.name();
-            default -> ErrorCode.INTERNAL_SERVER_ERROR.name();
-        };
+        if (ex instanceof HttpRequestMethodNotSupportedException) {
+            return ErrorCode.METHOD_NOT_ALLOWED.name();
+        }
+        if (ex instanceof HttpMediaTypeNotSupportedException) {
+            return ErrorCode.UNSUPPORTED_MEDIA_TYPE.name();
+        }
+        if (ex instanceof HttpMediaTypeNotAcceptableException) {
+            return ErrorCode.NOT_ACCEPTABLE.name();
+        }
+        if (ex instanceof MissingPathVariableException) {
+            return ErrorCode.MISSING_PATH_VARIABLE.name();
+        }
+        if (ex instanceof MissingServletRequestParameterException) {
+            return ErrorCode.MISSING_REQUEST_PARAMETER.name();
+        }
+        if (ex instanceof MissingServletRequestPartException) {
+            return ErrorCode.MISSING_REQUEST_PART.name();
+        }
+        if (ex instanceof ServletRequestBindingException) {
+            return ErrorCode.REQUEST_BINDING_ERROR.name();
+        }
+        if (ex instanceof NoResourceFoundException) {
+            return ErrorCode.ROUTE_NOT_FOUND.name();
+        }
+        if (ex instanceof NoHandlerFoundException) {
+            return ErrorCode.ROUTE_NOT_FOUND.name();
+        }
+        if (ex instanceof AsyncRequestTimeoutException) {
+            return ErrorCode.REQUEST_TIMEOUT.name();
+        }
+        if (ex instanceof MaxUploadSizeExceededException) {
+            return ErrorCode.PAYLOAD_TOO_LARGE.name();
+        }
+        if (ex instanceof ConversionNotSupportedException) {
+            return ErrorCode.CONVERSION_NOT_SUPPORTED.name();
+        }
+        if (ex instanceof TypeMismatchException) {
+            return ErrorCode.PARAMETER_TYPE_MISMATCH.name();
+        }
+        if (ex instanceof HttpMessageNotWritableException) {
+            return ErrorCode.MESSAGE_NOT_WRITABLE.name();
+        }
+        if (ex instanceof HandlerMethodValidationException) {
+            return ErrorCode.VALIDATION_FAILED.name();
+        }
+        if (ex instanceof MethodValidationException) {
+            return ErrorCode.METHOD_VALIDATION_ERROR.name();
+        }
+        return ErrorCode.INTERNAL_SERVER_ERROR.name();
     }
 }
