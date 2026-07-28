@@ -1,0 +1,6 @@
+com.example.demo.error.JsonExceptionHandler
+com.example.demo.error.ValidationExceptionHandler
+com.example.demo.error.DataExceptionHandler
+com.example.demo.error.GlobalExceptionHandler
+com.example.demo.error.ProblemDetailTraceAdvice
+com.example.demo.error.TraceIdResponseHeaderFilter
