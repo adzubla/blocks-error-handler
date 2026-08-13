@@ -1,4 +1,4 @@
-package com.example.demo.error;
+package io.adzubla.blocks.error;
 
 import io.micrometer.tracing.Tracer;
 import jakarta.servlet.FilterChain;

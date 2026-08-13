@@ -1,4 +1,4 @@
-package com.example.demo.error;
+package io.adzubla.blocks.error;
 
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;

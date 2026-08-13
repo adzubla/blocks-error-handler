@@ -1,5 +1,6 @@
-package com.example.demo.error;
+package io.adzubla.blocks.error;
 
+import com.example.demo.DemoApplication;
 import com.example.demo.TestcontainersConfiguration;
 import com.example.demo.product.ProductRepository;
 import org.hamcrest.Matchers;
@@ -19,7 +20,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest
+@SpringBootTest(classes = DemoApplication.class)
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 class ValidationExceptionHandlerIT {

@@ -1,5 +1,6 @@
-package com.example.demo.error;
+package io.adzubla.blocks.error;
 
+import com.example.demo.DemoApplication;
 import com.example.demo.TestcontainersConfiguration;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,9 +21,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest
+@SpringBootTest(classes = DemoApplication.class)
 @AutoConfigureMockMvc
-@Import(TestcontainersConfiguration.class)
+@Import({TestcontainersConfiguration.class, GlobalExceptionHandlerIT.GlobalTestConfig.class})
 class GlobalExceptionHandlerIT {
 
     @Autowired

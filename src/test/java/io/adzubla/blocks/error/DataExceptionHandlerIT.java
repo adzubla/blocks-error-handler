@@ -1,5 +1,6 @@
-package com.example.demo.error;
+package io.adzubla.blocks.error;
 
+import com.example.demo.DemoApplication;
 import com.example.demo.TestcontainersConfiguration;
 import com.example.demo.product.Product;
 import com.example.demo.product.ProductRepository;
@@ -22,9 +23,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest
+@SpringBootTest(classes = DemoApplication.class)
 @AutoConfigureMockMvc
-@Import(TestcontainersConfiguration.class)
+@Import({TestcontainersConfiguration.class, DataExceptionHandlerIT.ExceptionHandlerTestConfig.class})
 class DataExceptionHandlerIT {
 
     @Autowired

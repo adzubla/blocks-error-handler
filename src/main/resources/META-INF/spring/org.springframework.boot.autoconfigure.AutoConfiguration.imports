@@ -1,6 +1,6 @@
-com.example.demo.error.JsonExceptionHandler
-com.example.demo.error.ValidationExceptionHandler
-com.example.demo.error.DataExceptionHandler
-com.example.demo.error.GlobalExceptionHandler
-com.example.demo.error.ProblemDetailTraceAdvice
-com.example.demo.error.TraceIdResponseHeaderFilter
+io.adzubla.blocks.error.JsonExceptionHandler
+io.adzubla.blocks.error.ValidationExceptionHandler
+io.adzubla.blocks.error.DataExceptionHandler
+io.adzubla.blocks.error.GlobalExceptionHandler
+io.adzubla.blocks.error.ProblemDetailTraceAdvice
+io.adzubla.blocks.error.TraceIdResponseHeaderFilter

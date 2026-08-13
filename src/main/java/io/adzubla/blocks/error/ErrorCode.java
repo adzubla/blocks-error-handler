@@ -1,4 +1,4 @@
-package com.example.demo.error;
+package io.adzubla.blocks.error;
 
 public enum ErrorCode {
     // Custom error codes

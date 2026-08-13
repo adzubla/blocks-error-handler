@@ -1,4 +1,4 @@
-package com.example.demo.error;
+package io.adzubla.blocks.error;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
