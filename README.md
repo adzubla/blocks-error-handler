@@ -39,7 +39,7 @@ every failure mode your API can encounter:
 
 | Dependency                                                                                                  | Notes                                                          |
 |-------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------|
-| Spring Boot 4.x                                                                                             | Tested on 4.0.6                                                |
+| Spring Boot 4.x                                                                                             | Tested on 4.0.7                                                |
 | `spring-boot-starter-webmvc`                                                                                | Required                                                       |
 | `spring-boot-starter-validation`                                                                            | Required for `ValidationExceptionHandler`                      |
 | `spring-boot-starter-data-jpa`                                                                              | Required for `DataExceptionHandler`                            |
@@ -150,7 +150,7 @@ error message via regex; raw database messages are never forwarded to the client
 ### `GlobalExceptionHandler` — Spring MVC infrastructure + catch-all
 
 Extends `ResponseEntityExceptionHandler` to handle the full set of Spring MVC exceptions
-(405, 415, 400, 404, 408, 413, …) and adds a stable `code` field to each. A final
+(405, 415, 400, 404, 413, 503, …) and adds a stable `code` field to each. A final
 `@ExceptionHandler(Exception.class)` returns 500 `INTERNAL_SERVER_ERROR` and logs
 the stack trace at `ERROR` level.
 
