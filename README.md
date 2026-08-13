@@ -47,16 +47,22 @@ every failure mode your API can encounter:
 
 ## Adding the library to a project
 
-Copy the `com.example.demo.error` package into your project. Spring Boot's component
-scan will pick up all `@RestControllerAdvice` and `@Component` beans automatically,
-provided the package is within your application's scan root.
+Add this module as a dependency:
 
-> **Packaging as a reusable JAR.** If you extract these classes into a shared library,
-> register them in
-> `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
-> (one fully-qualified class name per line). Spring Boot reads that file at startup and
-> activates the listed classes as auto-configurations, so consumers of the JAR need no
-> `@Import` or `@ComponentScan` — the dependency alone is sufficient.
+```xml
+<dependency>
+    <groupId>io.adzubla.blocks</groupId>
+    <artifactId>blocks-error-handler</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+</dependency>
+```
+
+The JAR ships
+`META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`,
+which Spring Boot reads at startup to activate `JsonExceptionHandler`,
+`ValidationExceptionHandler`, `DataExceptionHandler`, `GlobalExceptionHandler`,
+`ProblemDetailTraceAdvice`, and `TraceIdResponseHeaderFilter` automatically — no
+`@Import` or `@ComponentScan` required.
 
 ## What's included
 
@@ -189,14 +195,14 @@ Override individual loggers to tune verbosity:
 
 ```properties
 # JsonExceptionHandler — DEBUG for all recognised causes, WARN for unclassified bodies
-logging.level.com.example.demo.error.JsonExceptionHandler=DEBUG
+logging.level.io.adzubla.blocks.error.JsonExceptionHandler=DEBUG
 # ValidationExceptionHandler — DEBUG for every violation set
-logging.level.com.example.demo.error.ValidationExceptionHandler=DEBUG
+logging.level.io.adzubla.blocks.error.ValidationExceptionHandler=DEBUG
 # DataExceptionHandler — WARN for constraint violations, DEBUG for not-found
-logging.level.com.example.demo.error.DataExceptionHandler=DEBUG
+logging.level.io.adzubla.blocks.error.DataExceptionHandler=DEBUG
 # GlobalExceptionHandler — ERROR for unexpected exceptions (stack trace included),
 # everything else inherited from Spring's ResponseEntityExceptionHandler (WARN)
-logging.level.com.example.demo.error.GlobalExceptionHandler=DEBUG
+logging.level.io.adzubla.blocks.error.GlobalExceptionHandler=DEBUG
 # Suppress the stack-trace log that Spring MVC itself emits for resolved exceptions.
 # Useful in production to avoid double-logging when GlobalExceptionHandler already logs.
 logging.level.org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler=ERROR
@@ -218,9 +224,9 @@ internals (e.g. to diagnose a misconfigured deserializer):
 
 ```properties
 # Stack traces for JSON deserialization failures
-logging.level.com.example.demo.error.JsonExceptionHandler=TRACE
+logging.level.io.adzubla.blocks.error.JsonExceptionHandler=TRACE
 # Stack traces for Bean Validation failures
-logging.level.com.example.demo.error.ValidationExceptionHandler=TRACE
+logging.level.io.adzubla.blocks.error.ValidationExceptionHandler=TRACE
 ```
 
 `GlobalExceptionHandler.handleUnexpected` is the exception to this pattern: it logs at
@@ -271,7 +277,7 @@ If you package this library as a JAR and your application defines its own `messa
 list both basenames so Spring merges them:
 
 ```properties
-spring.messages.basename=messages,classpath:com/example/demo/error/messages
+spring.messages.basename=messages,classpath:io/adzubla/blocks/error/messages
 spring.messages.encoding=UTF-8
 ```
 
