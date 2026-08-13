@@ -12,6 +12,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
@@ -107,6 +108,19 @@ class DataExceptionHandlerIT {
                 .andExpect(jsonPath("$.traceId").isString());
     }
 
+    @Test
+    void optimisticLockingFailure_returnsConflict() throws Exception {
+        mvc.perform(post("/test/exceptions/optimistic-locking"))
+                .andDo(print())
+                .andExpect(status().isConflict())
+                .andExpect(header().exists("X-Trace-Id"))
+                .andExpect(jsonPath("$.title").value("Concurrent modification"))
+                .andExpect(jsonPath("$.detail").value(
+                        "The resource was modified by another request. Reload it and try again."))
+                .andExpect(jsonPath("$.code").value("OPTIMISTIC_LOCKING_FAILURE"))
+                .andExpect(jsonPath("$.traceId").isString());
+    }
+
     // --- i18n ---
 
     @Test
@@ -187,6 +201,12 @@ class DataExceptionHandlerIT {
         @Transactional
         void dataIntegrity() {
             jdbc.update("INSERT INTO products (price, stock) VALUES (1.0, 0)");
+        }
+
+        // Concurrent @Version conflict → OptimisticLockingFailureException → handleOptimisticLockingFailure
+        @PostMapping("/optimistic-locking")
+        void optimisticLocking() {
+            throw new OptimisticLockingFailureException("stale entity version");
         }
     }
 }

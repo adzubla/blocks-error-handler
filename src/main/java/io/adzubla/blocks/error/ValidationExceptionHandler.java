@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 
+import jakarta.validation.ConstraintViolationException;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -29,6 +31,9 @@ import java.util.Map;
  *       {@link org.springframework.validation.BindingResult}.
  *   <li>{@link org.springframework.web.method.annotation.HandlerMethodValidationException} — raised
  *       by {@code @Validated} on individual method parameters or return values.
+ *   <li>{@link jakarta.validation.ConstraintViolationException} — raised by {@code @Validated} on
+ *       non-controller Spring beans (e.g. a service layer) or by direct {@code Validator} calls,
+ *       neither of which go through Spring MVC's argument-resolution machinery.
  * </ul>
  *
  * <p>Every violation is mapped to a {@code violations} array entry with:
@@ -94,6 +99,23 @@ public class ValidationExceptionHandler {
                 .toList();
 
         log.debug("Handler method validation failed with {} violation(s)", violations.size());
+        log.trace("Stack trace:", ex);
+        return unprocessable(violations);
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ProblemDetail> handleConstraintViolation(ConstraintViolationException ex) {
+        var violations = ex.getConstraintViolations().stream()
+                .sorted(Comparator.comparing(v -> v.getPropertyPath().toString()))
+                .map(violation -> Map.of(
+                        "path", "$." + violation.getPropertyPath().toString(),
+                        "invalidValue", violation.getInvalidValue() != null
+                                ? String.valueOf(violation.getInvalidValue()) : "null",
+                        "message", violation.getMessage() != null ? violation.getMessage() : ""
+                ))
+                .toList();
+
+        log.debug("Constraint violation with {} violation(s)", violations.size());
         log.trace("Stack trace:", ex);
         return unprocessable(violations);
     }

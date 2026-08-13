@@ -10,6 +10,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -32,6 +33,7 @@ import java.util.regex.Pattern;
  *       → 409 {@code DATA_INTEGRITY_VIOLATION}
  *   <li>{@link org.springframework.dao.EmptyResultDataAccessException} → 404 {@code RESOURCE_NOT_FOUND}
  *   <li>{@link jakarta.persistence.EntityNotFoundException} → 404 {@code RESOURCE_NOT_FOUND}
+ *   <li>{@link org.springframework.dao.OptimisticLockingFailureException} → 409 {@code OPTIMISTIC_LOCKING_FAILURE}
  * </ul>
  * <p>
  * Constraint names are extracted from the PostgreSQL error message via regex so the response body
@@ -119,5 +121,14 @@ public class DataExceptionHandler {
         problem.setTitle(msg("error.resource-not-found.title"));
         problem.setProperty("code", ErrorCode.RESOURCE_NOT_FOUND.name());
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
+    }
+
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<ProblemDetail> handleOptimisticLockingFailure(OptimisticLockingFailureException ex) {
+        log.warn("Optimistic locking failure: {}", ex.getMessage());
+        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, msg("error.optimistic-locking.detail"));
+        problem.setTitle(msg("error.optimistic-locking.title"));
+        problem.setProperty("code", ErrorCode.OPTIMISTIC_LOCKING_FAILURE.name());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
     }
 }

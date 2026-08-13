@@ -103,8 +103,10 @@ Jackson 3 cause chain to a structured response:
 
 ### `ValidationExceptionHandler` — 422 Unprocessable Content
 
-Handles `MethodArgumentNotValidException` (`@Valid` on `@RequestBody`) and
-`HandlerMethodValidationException` (`@Validated` on individual parameters).
+Handles `MethodArgumentNotValidException` (`@Valid` on `@RequestBody`),
+`HandlerMethodValidationException` (`@Validated` on individual controller parameters), and
+`ConstraintViolationException` (`@Validated` on non-controller beans, e.g. a service layer, or
+direct `Validator` calls).
 
 ```json
 {
@@ -135,14 +137,15 @@ Handles `MethodArgumentNotValidException` (`@Valid` on `@RequestBody`) and
 Handles JPA and JDBC data exceptions. Constraint names are extracted from the PostgreSQL
 error message via regex; raw database messages are never forwarded to the client.
 
-| Exception                         | Condition              | `code`                            | Status |
-|-----------------------------------|------------------------|-----------------------------------|--------|
-| `DuplicateKeyException`           | any                    | `DUPLICATE_VALUE`                 | 409    |
-| `DataIntegrityViolationException` | unique constraint      | `DUPLICATE_VALUE`                 | 409    |
-| `DataIntegrityViolationException` | foreign key constraint | `REFERENTIAL_INTEGRITY_VIOLATION` | 409    |
-| `DataIntegrityViolationException` | other                  | `DATA_INTEGRITY_VIOLATION`        | 409    |
-| `EmptyResultDataAccessException`  | any                    | `RESOURCE_NOT_FOUND`              | 404    |
-| `EntityNotFoundException`         | any                    | `RESOURCE_NOT_FOUND`              | 404    |
+| Exception                           | Condition              | `code`                            | Status |
+|-------------------------------------|------------------------|-----------------------------------|--------|
+| `DuplicateKeyException`             | any                    | `DUPLICATE_VALUE`                 | 409    |
+| `DataIntegrityViolationException`   | unique constraint      | `DUPLICATE_VALUE`                 | 409    |
+| `DataIntegrityViolationException`   | foreign key constraint | `REFERENTIAL_INTEGRITY_VIOLATION` | 409    |
+| `DataIntegrityViolationException`   | other                  | `DATA_INTEGRITY_VIOLATION`        | 409    |
+| `EmptyResultDataAccessException`    | any                    | `RESOURCE_NOT_FOUND`              | 404    |
+| `EntityNotFoundException`           | any                    | `RESOURCE_NOT_FOUND`              | 404    |
+| `OptimisticLockingFailureException` | any                    | `OPTIMISTIC_LOCKING_FAILURE`      | 409    |
 
 ### `GlobalExceptionHandler` — Spring MVC infrastructure + catch-all
 
@@ -350,6 +353,7 @@ per-request locale, supply a locale-aware `MessageInterpolator` in your validato
 | `DUPLICATE_VALUE`                 | 409    | Unique constraint violated                |
 | `REFERENTIAL_INTEGRITY_VIOLATION` | 409    | Foreign key constraint violated           |
 | `DATA_INTEGRITY_VIOLATION`        | 409    | Other integrity constraint violated       |
+| `OPTIMISTIC_LOCKING_FAILURE`      | 409    | Resource modified by another request      |
 | `RESOURCE_NOT_FOUND`              | 404    | Entity or query result not found          |
 | `METHOD_NOT_ALLOWED`              | 405    | HTTP method not supported                 |
 | `UNSUPPORTED_MEDIA_TYPE`          | 415    | `Content-Type` not accepted               |

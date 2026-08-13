@@ -3,15 +3,22 @@ package io.adzubla.blocks.error;
 import com.example.demo.DemoApplication;
 import com.example.demo.TestcontainersConfiguration;
 import com.example.demo.product.ProductRepository;
+import jakarta.validation.constraints.NotBlank;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
@@ -22,7 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(classes = DemoApplication.class)
 @AutoConfigureMockMvc
-@Import(TestcontainersConfiguration.class)
+@Import({TestcontainersConfiguration.class, ValidationExceptionHandlerIT.ConstraintViolationTestConfig.class})
 class ValidationExceptionHandlerIT {
 
     @Autowired
@@ -254,6 +261,21 @@ class ValidationExceptionHandlerIT {
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.violations").isArray())
                 .andExpect(jsonPath("$.violations[?(@.path=='$.id')]").exists())
+                .andExpect(jsonPath("$.traceId").isString());
+    }
+
+    // --- ConstraintViolationException (@Validated on a non-controller bean) ---
+
+    @Test
+    void serviceLayerConstraintViolation_returnsUnprocessableWithViolation() throws Exception {
+        mvc.perform(post("/test/constraint-violation"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(header().exists("X-Trace-Id"))
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.title").value("Validation failed"))
+                .andExpect(jsonPath("$.violations").isArray())
+                .andExpect(jsonPath("$.violations[?(@.path=~/.*value$/)]").exists())
                 .andExpect(jsonPath("$.traceId").isString());
     }
 
@@ -612,5 +634,44 @@ class ValidationExceptionHandlerIT {
                 .andExpect(jsonPath("$.violations[?(@.path=='$.sizeField')].message",
                         hasItem(Matchers.allOf(containsString("2"), containsString("8")))))
                 .andExpect(jsonPath("$.traceId").isString());
+    }
+
+    @TestConfiguration
+    static class ConstraintViolationTestConfig {
+
+        @Bean
+        ValidatedService validatedService() {
+            return new ValidatedService();
+        }
+
+        @Bean
+        ConstraintViolationTriggerController constraintViolationTriggerController(ValidatedService service) {
+            return new ConstraintViolationTriggerController(service);
+        }
+    }
+
+    @Validated
+    static class ValidatedService {
+
+        void requireNonBlank(@NotBlank String value) {
+        }
+    }
+
+    @RestController
+    @RequestMapping("/test/constraint-violation")
+    static class ConstraintViolationTriggerController {
+
+        private final ValidatedService service;
+
+        ConstraintViolationTriggerController(ValidatedService service) {
+            this.service = service;
+        }
+
+        // @Validated service method called with a blank arg → ConstraintViolationException →
+        // handleConstraintViolation
+        @PostMapping
+        void trigger() {
+            service.requireNonBlank("");
+        }
     }
 }
