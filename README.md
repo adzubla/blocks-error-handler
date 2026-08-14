@@ -163,8 +163,11 @@ responses are not intercepted.
 ### `TraceIdResponseHeaderFilter`
 
 `OncePerRequestFilter` that sets an `X-Trace-Id: <hex>` response header on **every**
-response (success and error alike). Runs at `Ordered.LOWEST_PRECEDENCE` so it is
+response (success and error alike) by default. Runs at `Ordered.LOWEST_PRECEDENCE` so it is
 guaranteed to execute inside the `ServerHttpObservationFilter` span context.
+
+Set `blocks.error.trace.header.error-only=true` to restrict the header to error responses
+(HTTP status 400+) only — see [Tracing](#tracing) below.
 
 ## Configuration
 
@@ -187,6 +190,10 @@ management.tracing.sampling.probability=1.0
 # Disable tracing entirely without removing the dependency.
 # ProblemDetailTraceAdvice and TraceIdResponseHeaderFilter become no-ops.
 # management.tracing.enabled=false
+
+# Only add the X-Trace-Id response header to error responses (status 400+).
+# Defaults to false, meaning the header is added to every response.
+blocks.error.trace.header.error-only=true
 ```
 
 ### Logging
