@@ -35,35 +35,54 @@
     </dependencyManagement>
 
     <dependencies>
+        <!-- Optional: required only for JpaEntityNotFoundExceptionHandler, which is gated behind
+             @ConditionalOnClass(EntityNotFoundException.class). Consumers not using JPA don't pull
+             this in. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
+            <optional>true</optional>
         </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-jdbc</artifactId>
-        </dependency>
+        <!-- Optional: required only for ConstraintViolationExceptionHandler, which is gated behind
+             @ConditionalOnClass(ConstraintViolationException.class). Consumers not using Bean
+             Validation don't pull this in. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc</artifactId>
         </dependency>
+        <!-- Optional: actuator + tracing bring the Tracer bean that ProblemDetailTraceAdvice and
+             TraceIdResponseHeaderFilter consume; both are gated behind
+             @ConditionalOnClass(Tracer.class). Consumers not using Micrometer Tracing don't pull
+             this in. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-micrometer-tracing-brave</artifactId>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-tracing-bridge-brave</artifactId>
+            <optional>true</optional>
         </dependency>
 
+        <!-- Test-only: this library's own code never touches JDBC/DataSource APIs. jdbc is needed
+             here solely to give the integration tests (Testcontainers-backed Postgres) a real
+             connection pool (HikariCP); consumers get their own via whatever starter they choose. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>

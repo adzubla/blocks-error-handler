@@ -2,6 +2,7 @@ package io.adzubla.blocks.error.trace;
 
 import io.micrometer.tracing.Tracer;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
@@ -24,8 +25,14 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
  *
  * <p>{@link #supports} is scoped to {@code @ExceptionHandler} methods, so normal
  * controller responses are never intercepted.
+ *
+ * <p>Gated behind {@link ConditionalOnClass @ConditionalOnClass(Tracer.class)} because
+ * {@code io.micrometer.tracing.Tracer} is imported directly as a field type here; without the guard,
+ * this bean would fail to load in any application that doesn't have Micrometer Tracing on the
+ * classpath.
  */
 @RestControllerAdvice
+@ConditionalOnClass(Tracer.class)
 public class ProblemDetailTraceAdvice implements ResponseBodyAdvice<Object> {
 
     private final Tracer tracer;

@@ -1,7 +1,6 @@
 package io.adzubla.blocks.error.handler;
 
 import io.adzubla.blocks.error.ErrorCode;
-import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.MessageSource;
@@ -22,7 +21,7 @@ import java.util.Objects;
 import java.util.regex.Pattern;
 
 /**
- * Translates JPA and JDBC data exceptions into RFC 9457 {@link org.springframework.http.ProblemDetail} responses.
+ * Translates JDBC data exceptions into RFC 9457 {@link org.springframework.http.ProblemDetail} responses.
  *
  * <ul>
  *   <li>{@link org.springframework.dao.DuplicateKeyException} → 409 {@code DUPLICATE_VALUE}
@@ -33,12 +32,14 @@ import java.util.regex.Pattern;
  *   <li>{@link org.springframework.dao.DataIntegrityViolationException} (other)
  *       → 409 {@code DATA_INTEGRITY_VIOLATION}
  *   <li>{@link org.springframework.dao.EmptyResultDataAccessException} → 404 {@code RESOURCE_NOT_FOUND}
- *   <li>{@link jakarta.persistence.EntityNotFoundException} → 404 {@code RESOURCE_NOT_FOUND}
  *   <li>{@link org.springframework.dao.OptimisticLockingFailureException} → 409 {@code OPTIMISTIC_LOCKING_FAILURE}
  * </ul>
  * <p>
  * Constraint names are extracted from the PostgreSQL error message via regex so the response body
  * exposes only a stable {@code code} value, never raw database messages.
+ *
+ * <p>JPA's {@code EntityNotFoundException} is handled separately by
+ * {@link JpaEntityNotFoundExceptionHandler}, which is only registered when JPA is on the classpath.
  */
 @RestControllerAdvice
 @Order(Ordered.HIGHEST_PRECEDENCE)
@@ -109,15 +110,6 @@ public class DataExceptionHandler {
     @ExceptionHandler(EmptyResultDataAccessException.class)
     public ResponseEntity<ProblemDetail> handleEmptyResult(EmptyResultDataAccessException ex) {
         log.debug("Empty result: {}", ex.getMessage());
-        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, msg("error.resource-not-found.detail"));
-        problem.setTitle(msg("error.resource-not-found.title"));
-        problem.setProperty("code", ErrorCode.RESOURCE_NOT_FOUND.name());
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
-    }
-
-    @ExceptionHandler(EntityNotFoundException.class)
-    public ResponseEntity<ProblemDetail> handleEntityNotFound(EntityNotFoundException ex) {
-        log.debug("Entity not found: {}", ex.getMessage());
         var problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, msg("error.resource-not-found.detail"));
         problem.setTitle(msg("error.resource-not-found.title"));
         problem.setProperty("code", ErrorCode.RESOURCE_NOT_FOUND.name());

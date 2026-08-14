@@ -41,9 +41,16 @@ every failure mode your API can encounter:
 |-------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------|
 | Spring Boot 4.x                                                                                             | Tested on 4.0.7                                                |
 | `spring-boot-starter-webmvc`                                                                                | Required                                                       |
-| `spring-boot-starter-validation`                                                                            | Required for `ValidationExceptionHandler`                      |
-| `spring-boot-starter-data-jpa`                                                                              | Required for `DataExceptionHandler`                            |
+| `spring-boot-starter-validation`                                                                            | Optional — enables `ConstraintViolationExceptionHandler`       |
+| `spring-boot-starter-data-jpa`                                                                              | Optional — enables `JpaEntityNotFoundExceptionHandler`         |
 | `spring-boot-starter-actuator` + `spring-boot-micrometer-tracing-brave` + `micrometer-tracing-bridge-brave` | Optional — enables `traceId` in bodies and `X-Trace-Id` header |
+
+This library declares the optional dependencies above as Maven `<optional>true</optional>`, so they
+are **not** pulled transitively into your application — add the ones you need yourself. Each
+feature that depends on one is gated behind `@ConditionalOnClass`, so the corresponding handler
+bean simply isn't registered when the dependency is absent; everything else (JSON parsing errors,
+Spring MVC validation via `@Valid`, `GlobalExceptionHandler`, `DataExceptionHandler`'s
+JDBC-level exceptions) works with just `spring-boot-starter-webmvc`.
 
 ## Adding the library to a project
 
@@ -60,9 +67,12 @@ Add this module as a dependency:
 The JAR ships
 `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`,
 which Spring Boot reads at startup to activate `JsonExceptionHandler`,
-`ValidationExceptionHandler`, `DataExceptionHandler`, `GlobalExceptionHandler`,
-`ProblemDetailTraceAdvice`, and `TraceIdResponseHeaderFilter` automatically — no
-`@Import` or `@ComponentScan` required.
+`ValidationExceptionHandler`, `ConstraintViolationExceptionHandler`, `DataExceptionHandler`,
+`JpaEntityNotFoundExceptionHandler`, `GlobalExceptionHandler`, `ProblemDetailTraceAdvice`, and
+`TraceIdResponseHeaderFilter` automatically — no `@Import` or `@ComponentScan` required.
+`ConstraintViolationExceptionHandler`, `JpaEntityNotFoundExceptionHandler`,
+`ProblemDetailTraceAdvice`, and `TraceIdResponseHeaderFilter` are each gated behind
+`@ConditionalOnClass` and back off silently when their optional dependency isn't present.
 
 ## What's included
 
@@ -103,10 +113,16 @@ Jackson 3 cause chain to a structured response:
 
 ### `ValidationExceptionHandler` — 422 Unprocessable Content
 
-Handles `MethodArgumentNotValidException` (`@Valid` on `@RequestBody`),
-`HandlerMethodValidationException` (`@Validated` on individual controller parameters), and
+Handles `MethodArgumentNotValidException` (`@Valid` on `@RequestBody`) and
+`HandlerMethodValidationException` (`@Validated` on individual controller parameters). Requires
+only `spring-boot-starter-webmvc`.
+
 `ConstraintViolationException` (`@Validated` on non-controller beans, e.g. a service layer, or
-direct `Validator` calls).
+direct `Validator` calls) is handled separately by `ConstraintViolationExceptionHandler`, which is
+only registered when `spring-boot-starter-validation` is on the classpath
+(`@ConditionalOnClass(ConstraintViolationException.class)`).
+
+Both produce the same response shape:
 
 ```json
 {
@@ -134,8 +150,10 @@ direct `Validator` calls).
 
 ### `DataExceptionHandler` — 404 / 409
 
-Handles JPA and JDBC data exceptions. Constraint names are extracted from the PostgreSQL
-error message via regex; raw database messages are never forwarded to the client.
+Handles JDBC data exceptions (`org.springframework.dao.*`, part of Spring's core transaction
+support — no extra dependency needed beyond `spring-boot-starter-webmvc`). Constraint names are
+extracted from the PostgreSQL error message via regex; raw database messages are never forwarded
+to the client.
 
 | Exception                           | Condition              | `code`                            | Status |
 |-------------------------------------|------------------------|-----------------------------------|--------|
@@ -146,6 +164,10 @@ error message via regex; raw database messages are never forwarded to the client
 | `OptimisticLockingFailureException` | any                    | `OPTIMISTIC_LOCKING_FAILURE`      | 409    |
 | `EmptyResultDataAccessException`    | any                    | `RESOURCE_NOT_FOUND`              | 404    |
 | `EntityNotFoundException`           | any                    | `RESOURCE_NOT_FOUND`              | 404    |
+
+JPA's `EntityNotFoundException` is handled separately by `JpaEntityNotFoundExceptionHandler`,
+which is only registered when `spring-boot-starter-data-jpa` is on the classpath
+(`@ConditionalOnClass(EntityNotFoundException.class)`):
 
 ### `GlobalExceptionHandler` — Spring MVC infrastructure + catch-all
 

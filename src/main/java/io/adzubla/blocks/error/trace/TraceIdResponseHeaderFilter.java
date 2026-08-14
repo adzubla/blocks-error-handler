@@ -6,6 +6,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -30,10 +31,15 @@ import java.io.IOException;
  * silently omitted if a downstream handler commits the response before returning.
  *
  * <p>If the {@link io.micrometer.tracing.Tracer} bean is absent the filter delegates without
- * setting the header, making Micrometer Tracing an optional runtime dependency.
+ * setting the header, making the Micrometer Tracing bean itself optional at runtime. However, the
+ * {@code io.micrometer.tracing.Tracer} class is imported directly as a field type here, so the
+ * class must still be on the classpath at load time; hence the
+ * {@link ConditionalOnClass @ConditionalOnClass(Tracer.class)} guard, without which this bean would
+ * fail to load in any application that doesn't have Micrometer Tracing on the classpath.
  */
 @Component
 @Order(Ordered.LOWEST_PRECEDENCE)
+@ConditionalOnClass(Tracer.class)
 @EnableConfigurationProperties(TraceIdHeaderProperties.class)
 public class TraceIdResponseHeaderFilter extends OncePerRequestFilter {
 
