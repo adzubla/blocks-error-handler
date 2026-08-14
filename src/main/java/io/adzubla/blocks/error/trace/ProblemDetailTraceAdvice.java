@@ -1,4 +1,4 @@
-package io.adzubla.blocks.error;
+package io.adzubla.blocks.error.trace;
 
 import io.micrometer.tracing.Tracer;
 import org.springframework.beans.factory.ObjectProvider;

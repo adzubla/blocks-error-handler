@@ -1,6 +1,6 @@
-io.adzubla.blocks.error.JsonExceptionHandler
-io.adzubla.blocks.error.ValidationExceptionHandler
-io.adzubla.blocks.error.DataExceptionHandler
-io.adzubla.blocks.error.GlobalExceptionHandler
-io.adzubla.blocks.error.ProblemDetailTraceAdvice
-io.adzubla.blocks.error.TraceIdResponseHeaderFilter
+io.adzubla.blocks.error.handler.JsonExceptionHandler
+io.adzubla.blocks.error.handler.ValidationExceptionHandler
+io.adzubla.blocks.error.handler.DataExceptionHandler
+io.adzubla.blocks.error.handler.GlobalExceptionHandler
+io.adzubla.blocks.error.trace.ProblemDetailTraceAdvice
+io.adzubla.blocks.error.trace.TraceIdResponseHeaderFilter

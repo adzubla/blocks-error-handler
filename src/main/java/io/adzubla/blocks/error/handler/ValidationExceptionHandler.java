@@ -1,5 +1,6 @@
-package io.adzubla.blocks.error;
+package io.adzubla.blocks.error.handler;
 
+import io.adzubla.blocks.error.ErrorCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.MessageSource;

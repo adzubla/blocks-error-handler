@@ -143,9 +143,9 @@ error message via regex; raw database messages are never forwarded to the client
 | `DataIntegrityViolationException`   | unique constraint      | `DUPLICATE_VALUE`                 | 409    |
 | `DataIntegrityViolationException`   | foreign key constraint | `REFERENTIAL_INTEGRITY_VIOLATION` | 409    |
 | `DataIntegrityViolationException`   | other                  | `DATA_INTEGRITY_VIOLATION`        | 409    |
+| `OptimisticLockingFailureException` | any                    | `OPTIMISTIC_LOCKING_FAILURE`      | 409    |
 | `EmptyResultDataAccessException`    | any                    | `RESOURCE_NOT_FOUND`              | 404    |
 | `EntityNotFoundException`           | any                    | `RESOURCE_NOT_FOUND`              | 404    |
-| `OptimisticLockingFailureException` | any                    | `OPTIMISTIC_LOCKING_FAILURE`      | 409    |
 
 ### `GlobalExceptionHandler` — Spring MVC infrastructure + catch-all
 
@@ -198,14 +198,14 @@ Override individual loggers to tune verbosity:
 
 ```properties
 # JsonExceptionHandler — DEBUG for all recognised causes, WARN for unclassified bodies
-logging.level.io.adzubla.blocks.error.JsonExceptionHandler=DEBUG
+logging.level.io.adzubla.blocks.error.handler.JsonExceptionHandler=DEBUG
 # ValidationExceptionHandler — DEBUG for every violation set
-logging.level.io.adzubla.blocks.error.ValidationExceptionHandler=DEBUG
+logging.level.io.adzubla.blocks.error.handler.ValidationExceptionHandler=DEBUG
 # DataExceptionHandler — WARN for constraint violations, DEBUG for not-found
-logging.level.io.adzubla.blocks.error.DataExceptionHandler=DEBUG
+logging.level.io.adzubla.blocks.error.handler.DataExceptionHandler=DEBUG
 # GlobalExceptionHandler — ERROR for unexpected exceptions (stack trace included),
 # everything else inherited from Spring's ResponseEntityExceptionHandler (WARN)
-logging.level.io.adzubla.blocks.error.GlobalExceptionHandler=DEBUG
+logging.level.io.adzubla.blocks.error.handler.GlobalExceptionHandler=DEBUG
 # Suppress the stack-trace log that Spring MVC itself emits for resolved exceptions.
 # Useful in production to avoid double-logging when GlobalExceptionHandler already logs.
 logging.level.org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler=ERROR
@@ -227,9 +227,9 @@ internals (e.g. to diagnose a misconfigured deserializer):
 
 ```properties
 # Stack traces for JSON deserialization failures
-logging.level.io.adzubla.blocks.error.JsonExceptionHandler=TRACE
+logging.level.io.adzubla.blocks.error.handler.JsonExceptionHandler=TRACE
 # Stack traces for Bean Validation failures
-logging.level.io.adzubla.blocks.error.ValidationExceptionHandler=TRACE
+logging.level.io.adzubla.blocks.error.handler.ValidationExceptionHandler=TRACE
 ```
 
 `GlobalExceptionHandler.handleUnexpected` is the exception to this pattern: it logs at

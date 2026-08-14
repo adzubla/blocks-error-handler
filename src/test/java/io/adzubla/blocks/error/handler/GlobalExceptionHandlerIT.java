@@ -1,4 +1,4 @@
-package io.adzubla.blocks.error;
+package io.adzubla.blocks.error.handler;
 
 import com.example.demo.DemoApplication;
 import com.example.demo.TestcontainersConfiguration;
