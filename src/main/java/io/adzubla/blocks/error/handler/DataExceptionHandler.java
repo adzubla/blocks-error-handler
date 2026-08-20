@@ -35,8 +35,12 @@ import java.util.regex.Pattern;
  *   <li>{@link org.springframework.dao.OptimisticLockingFailureException} → 409 {@code OPTIMISTIC_LOCKING_FAILURE}
  * </ul>
  * <p>
- * Constraint names are extracted from the PostgreSQL error message via regex so the response body
- * exposes only a stable {@code code} value, never raw database messages.
+ * Constraint names, and — for duplicate-key and foreign-key violations — the offending value
+ * ({@code invalidValue}), are extracted from the PostgreSQL error message via regex. The database
+ * column name itself is deliberately not exposed (it may not match a client-facing field name at
+ * all — different casing, a related entity, a generated key). The response body exposes only these
+ * structured fields plus a stable {@code code} value; the raw driver message text itself is never
+ * forwarded to the client.
  *
  * <p>JPA's {@code EntityNotFoundException} is handled separately by
  * {@link JpaEntityNotFoundExceptionHandler}, which is only registered when JPA is on the classpath.
@@ -90,17 +94,34 @@ public class DataExceptionHandler {
     private static final Pattern FK_CONSTRAINT = Pattern.compile(
             "foreign key constraint \"([^\"]+)\"", Pattern.CASE_INSENSITIVE);
 
+    // PostgreSQL: Detail: Key (column)=(value) already exists. / Key (column)=(value) is not present in table "t".
+    private static final Pattern KEY_DETAIL = Pattern.compile(
+            "Key \\(([^)]+)\\)=\\(([^)]*)\\)", Pattern.CASE_INSENSITIVE);
+
+    // Server-side only: the database column name, logged for troubleshooting but never returned
+    // to the client (see class Javadoc).
+    private record OffendingKey(String column, String value) {
+        private static final OffendingKey UNKNOWN = new OffendingKey("unknown", null);
+    }
+
+    private static OffendingKey offendingKey(String rootMessage) {
+        var matcher = KEY_DETAIL.matcher(rootMessage);
+        return matcher.find() ? new OffendingKey(matcher.group(1), matcher.group(2)) : OffendingKey.UNKNOWN;
+    }
+
     @ExceptionHandler(DuplicateKeyException.class)
     public ResponseEntity<ProblemDetail> handleDuplicateKey(DuplicateKeyException ex) {
         var status = HttpStatus.CONFLICT;
         var rootMessage = Objects.requireNonNullElse(ex.getMostSpecificCause().getMessage(), "");
         var uniqueMatcher = UNIQUE_CONSTRAINT.matcher(rootMessage);
         var constraint = uniqueMatcher.find() ? uniqueMatcher.group(1) : "unknown";
-        log.warn("{} {}: Duplicate key violation on constraint '{}': {}",
-                status.value(), ErrorCode.DUPLICATE_VALUE, constraint, rootMessage);
+        var key = offendingKey(rootMessage);
+        log.warn("{} {}: Duplicate key violation on constraint '{}', column '{}': {}",
+                status.value(), ErrorCode.DUPLICATE_VALUE, constraint, key.column(), rootMessage);
         var problem = ProblemDetail.forStatusAndDetail(status, msg("error.duplicate-value.detail"));
         problem.setTitle(msg("error.duplicate-value.title"));
         problem.setProperty("code", ErrorCode.DUPLICATE_VALUE.name());
+        problem.setProperty("invalidValue", key.value());
         return ResponseEntity.status(status).body(problem);
     }
 
@@ -112,22 +133,27 @@ public class DataExceptionHandler {
 
         var uniqueMatcher = UNIQUE_CONSTRAINT.matcher(rootMessage);
         if (uniqueMatcher.find()) {
-            log.warn("{} {}: Unique constraint violation on '{}': {}",
-                    status.value(), ErrorCode.DUPLICATE_VALUE, uniqueMatcher.group(1), rootMessage);
+            var key = offendingKey(rootMessage);
+            log.warn("{} {}: Unique constraint violation on '{}', column '{}': {}",
+                    status.value(), ErrorCode.DUPLICATE_VALUE, uniqueMatcher.group(1),
+                    key.column(), rootMessage);
             var problem = ProblemDetail.forStatusAndDetail(status, msg("error.duplicate-value.detail"));
             problem.setTitle(msg("error.duplicate-value.title"));
             problem.setProperty("code", ErrorCode.DUPLICATE_VALUE.name());
+            problem.setProperty("invalidValue", key.value());
             return ResponseEntity.status(status).body(problem);
         }
 
         var fkMatcher = FK_CONSTRAINT.matcher(rootMessage);
         if (fkMatcher.find()) {
-            log.warn("{} {}: Foreign key constraint violation on '{}': {}",
-                    status.value(), ErrorCode.REFERENTIAL_INTEGRITY_VIOLATION,
-                    fkMatcher.group(1), rootMessage);
+            var key = offendingKey(rootMessage);
+            log.warn("{} {}: Foreign key constraint violation on '{}', column '{}': {}",
+                    status.value(), ErrorCode.REFERENTIAL_INTEGRITY_VIOLATION, fkMatcher.group(1),
+                    key.column(), rootMessage);
             var problem = ProblemDetail.forStatusAndDetail(status, msg("error.referential-integrity.detail"));
             problem.setTitle(msg("error.referential-integrity.title"));
             problem.setProperty("code", ErrorCode.REFERENTIAL_INTEGRITY_VIOLATION.name());
+            problem.setProperty("invalidValue", key.value());
             return ResponseEntity.status(status).body(problem);
         }
 

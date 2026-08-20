@@ -155,6 +155,11 @@ support — no extra dependency needed beyond `spring-boot-starter-webmvc`). Con
 extracted from the PostgreSQL error message via regex; raw database messages are never forwarded
 to the client.
 
+For `DUPLICATE_VALUE` and `REFERENTIAL_INTEGRITY_VIOLATION`, the offending value is also extracted
+(from PostgreSQL's `Detail: Key (column)=(value) ...` line) and exposed as `invalidValue`. The
+database column name itself is deliberately not exposed — it may not match a client-facing field
+name at all (different casing, a related entity, a generated key).
+
 | Exception                           | Condition              | `code`                            | Status |
 |-------------------------------------|------------------------|-----------------------------------|--------|
 | `DuplicateKeyException`             | any                    | `DUPLICATE_VALUE`                 | 409    |
@@ -173,6 +178,7 @@ to the client.
   "detail": "A resource with the same value already exists.",
   "instance": "/products",
   "code": "DUPLICATE_VALUE",
+  "invalidValue": "Laptop",
   "traceId": "69fcf2db21f488679d633abb34871dbb"
 }
 ```
