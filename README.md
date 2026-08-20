@@ -165,6 +165,18 @@ to the client.
 | `EmptyResultDataAccessException`    | any                    | `RESOURCE_NOT_FOUND`              | 404    |
 | `EntityNotFoundException`           | any                    | `RESOURCE_NOT_FOUND`              | 404    |
 
+```json
+{
+  "type": "about:blank",
+  "title": "Duplicate value",
+  "status": 409,
+  "detail": "A resource with the same value already exists.",
+  "instance": "/products",
+  "code": "DUPLICATE_VALUE",
+  "traceId": "69fcf2db21f488679d633abb34871dbb"
+}
+```
+
 JPA's `EntityNotFoundException` is handled separately by `JpaEntityNotFoundExceptionHandler`,
 which is only registered when `spring-boot-starter-data-jpa` is on the classpath
 (`@ConditionalOnClass(EntityNotFoundException.class)`):
@@ -182,12 +194,12 @@ client — only the server log.
 
 Examples that land there instead of a 4xx:
 
-| Category                     | Examples                                                                                                      |
-|-------------------------------|-----------------------------------------------------------------------------------------------------------------|
-| Transient/lock failures        | `CannotAcquireLockException`, `PessimisticLockingFailureException`, `DeadlockLoseDataAccessException`, `CannotSerializeTransactionException`, `QueryTimeoutException` |
-| Connectivity/config failures   | `DataAccessResourceFailureException`, `CannotGetJdbcConnectionException`                                        |
-| Programming/schema errors      | `InvalidDataAccessResourceUsageException` (incl. `BadSqlGrammarException`), `TypeMismatchDataAccessException`   |
-| Uncategorized                  | `PermissionDeniedDataAccessException`, `UncategorizedDataAccessException` / `UncategorizedSQLException`         |
+| Category                         | Examples                                                                                                                                                                                                                             |
+|----------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Transient/lock failures          | `CannotAcquireLockException`, `PessimisticLockingFailureException`, `DeadlockLoseDataAccessException`, `CannotSerializeTransactionException`, `QueryTimeoutException`                                                                |
+| Connectivity/config failures     | `DataAccessResourceFailureException`, `CannotGetJdbcConnectionException`                                                                                                                                                             |
+| Programming/schema errors        | `InvalidDataAccessResourceUsageException` (incl. `BadSqlGrammarException`), `TypeMismatchDataAccessException`                                                                                                                        |
+| Uncategorized                    | `PermissionDeniedDataAccessException`, `UncategorizedDataAccessException` / `UncategorizedSQLException`                                                                                                                              |
 | Raw JPA (not repository-proxied) | `PersistenceException`, `EntityExistsException`, `OptimisticLockException`, `PessimisticLockException`, `LockTimeoutException`, `NoResultException`, `NonUniqueResultException`, `TransactionRequiredException`, `RollbackException` |
 
 That last row matters in practice: Spring only translates JPA exceptions into the
@@ -204,6 +216,32 @@ Extends `ResponseEntityExceptionHandler` to handle the full set of Spring MVC ex
 (405, 415, 400, 404, 413, 503, …) and adds a stable `code` field to each. A final
 `@ExceptionHandler(Exception.class)` returns 500 `INTERNAL_SERVER_ERROR` and logs
 the stack trace at `ERROR` level.
+
+```json
+{
+  "type": "about:blank",
+  "title": "Method Not Allowed",
+  "status": 405,
+  "detail": "Request method 'DELETE' is not supported.",
+  "instance": "/products",
+  "code": "METHOD_NOT_ALLOWED",
+  "traceId": "69fcf2db21f488679d633abb34871dbb"
+}
+```
+
+Anything not claimed by a more specific `@ExceptionHandler` anywhere falls to the catch-all:
+
+```json
+{
+  "type": "about:blank",
+  "title": "Internal server error",
+  "status": 500,
+  "detail": "An unexpected error occurred.",
+  "instance": "/products",
+  "code": "INTERNAL_SERVER_ERROR",
+  "traceId": "69fcf2db21f488679d633abb34871dbb"
+}
+```
 
 ### `ProblemDetailTraceAdvice`
 
@@ -397,37 +435,37 @@ per-request locale, supply a locale-aware `MessageInterpolator` in your validato
 
 ## Error code reference
 
-| `code`                            | Status | Meaning                                   |
-|-----------------------------------|--------|-------------------------------------------|
-| `MALFORMED_JSON`                  | 400    | Syntactically invalid JSON                |
-| `MALFORMED_REQUEST_BODY`          | 400    | Body unreadable (unclassified)            |
-| `UNKNOWN_JSON_FIELD`              | 400    | Field not declared on the target type     |
-| `INVALID_ENUM_VALUE`              | 400    | Value not in enum constants               |
-| `INVALID_FIELD_VALUE`             | 400    | Value cannot be coerced to target type    |
-| `TYPE_MISMATCH`                   | 400    | Wrong JSON token type for target          |
-| `INTEGER_OVERFLOW`                | 400    | Numeric value outside type range          |
-| `VALIDATION_FAILED`               | 422¹   | Bean Validation constraint failure        |
-| `METHOD_VALIDATION_ERROR`         | 422    | Method-level validation failure           |
-| `DUPLICATE_VALUE`                 | 409    | Unique constraint violated                |
-| `REFERENTIAL_INTEGRITY_VIOLATION` | 409    | Foreign key constraint violated           |
-| `DATA_INTEGRITY_VIOLATION`        | 409    | Other integrity constraint violated       |
-| `OPTIMISTIC_LOCKING_FAILURE`      | 409    | Resource modified by another request      |
-| `RESOURCE_NOT_FOUND`              | 404    | Entity or query result not found          |
-| `METHOD_NOT_ALLOWED`              | 405    | HTTP method not supported                 |
-| `UNSUPPORTED_MEDIA_TYPE`          | 415    | `Content-Type` not accepted               |
-| `NOT_ACCEPTABLE`                  | 406    | Requested `Accept` type unavailable       |
-| `MISSING_PATH_VARIABLE`           | 400    | Required path variable absent             |
-| `MISSING_REQUEST_PARAMETER`       | 400    | Required query parameter absent           |
-| `MISSING_REQUEST_PART`            | 400    | Required multipart part absent            |
-| `REQUEST_BINDING_ERROR`           | 400    | Servlet request binding failure           |
-| `ROUTE_NOT_FOUND`                 | 404    | No handler mapped for the request path    |
-| `REQUEST_TIMEOUT`                 | 503    | Async request timed out                   |
-| `PAYLOAD_TOO_LARGE`               | 413    | Upload exceeds configured limit           |
-| `CONVERSION_NOT_SUPPORTED`        | 500    | No converter for property type            |
-| `PARAMETER_TYPE_MISMATCH`         | 400    | Query/path parameter type coercion failed |
-| `MESSAGE_NOT_WRITABLE`            | 500    | Response body could not be serialised     |
+| `code`                            | Status | Meaning                                                                                  |
+|-----------------------------------|--------|------------------------------------------------------------------------------------------|
+| `MALFORMED_JSON`                  | 400    | Syntactically invalid JSON                                                               |
+| `MALFORMED_REQUEST_BODY`          | 400    | Body unreadable (unclassified)                                                           |
+| `UNKNOWN_JSON_FIELD`              | 400    | Field not declared on the target type                                                    |
+| `INVALID_ENUM_VALUE`              | 400    | Value not in enum constants                                                              |
+| `INVALID_FIELD_VALUE`             | 400    | Value cannot be coerced to target type                                                   |
+| `TYPE_MISMATCH`                   | 400    | Wrong JSON token type for target                                                         |
+| `INTEGER_OVERFLOW`                | 400    | Numeric value outside type range                                                         |
+| `VALIDATION_FAILED`               | 422¹   | Bean Validation constraint failure                                                       |
+| `METHOD_VALIDATION_ERROR`         | 422    | Method-level validation failure                                                          |
+| `DUPLICATE_VALUE`                 | 409    | Unique constraint violated                                                               |
+| `REFERENTIAL_INTEGRITY_VIOLATION` | 409    | Foreign key constraint violated                                                          |
+| `DATA_INTEGRITY_VIOLATION`        | 409    | Other integrity constraint violated                                                      |
+| `OPTIMISTIC_LOCKING_FAILURE`      | 409    | Resource modified by another request                                                     |
+| `RESOURCE_NOT_FOUND`              | 404    | Entity or query result not found                                                         |
+| `METHOD_NOT_ALLOWED`              | 405    | HTTP method not supported                                                                |
+| `UNSUPPORTED_MEDIA_TYPE`          | 415    | `Content-Type` not accepted                                                              |
+| `NOT_ACCEPTABLE`                  | 406    | Requested `Accept` type unavailable                                                      |
+| `MISSING_PATH_VARIABLE`           | 400    | Required path variable absent                                                            |
+| `MISSING_REQUEST_PARAMETER`       | 400    | Required query parameter absent                                                          |
+| `MISSING_REQUEST_PART`            | 400    | Required multipart part absent                                                           |
+| `REQUEST_BINDING_ERROR`           | 400    | Servlet request binding failure                                                          |
+| `ROUTE_NOT_FOUND`                 | 404    | No handler mapped for the request path                                                   |
+| `REQUEST_TIMEOUT`                 | 503    | Async request timed out                                                                  |
+| `PAYLOAD_TOO_LARGE`               | 413    | Upload exceeds configured limit                                                          |
+| `CONVERSION_NOT_SUPPORTED`        | 500    | No converter for property type                                                           |
+| `PARAMETER_TYPE_MISMATCH`         | 400    | Query/path parameter type coercion failed                                                |
+| `MESSAGE_NOT_WRITABLE`            | 500    | Response body could not be serialised                                                    |
 | `ERROR_RESPONSE`                  | varies | `ErrorResponseException` with no dedicated code (status comes from the exception itself) |
-| `INTERNAL_SERVER_ERROR`           | 500    | Unexpected exception                      |
+| `INTERNAL_SERVER_ERROR`           | 500    | Unexpected exception                                                                     |
 
 ¹ `VALIDATION_FAILED` is 422 for `MethodArgumentNotValidException` /
 `HandlerMethodValidationException` (handled by `ValidationExceptionHandler`), but 400 for a plain
