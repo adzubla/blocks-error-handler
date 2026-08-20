@@ -169,6 +169,35 @@ JPA's `EntityNotFoundException` is handled separately by `JpaEntityNotFoundExcep
 which is only registered when `spring-boot-starter-data-jpa` is on the classpath
 (`@ConditionalOnClass(EntityNotFoundException.class)`):
 
+#### Unhandled JPA/JDBC/SQL exceptions
+
+Only the four `DataAccessException` subtypes in the table above (plus `EntityNotFoundException`,
+handled separately) get a dedicated 4xx response. Everything else data-access-related —
+every other `org.springframework.dao.DataAccessException` subtype, and any raw JPA exception
+Spring's translation never reaches — falls through to `GlobalExceptionHandler`'s
+`@ExceptionHandler(Exception.class)` catch-all: **HTTP 500**, `code=INTERNAL_SERVER_ERROR`, a
+generic client-facing `detail`, and the full exception (root cause included, which may contain raw
+SQL or driver-specific detail) logged server-side at `ERROR`. None of that detail reaches the
+client — only the server log.
+
+Examples that land there instead of a 4xx:
+
+| Category                     | Examples                                                                                                      |
+|-------------------------------|-----------------------------------------------------------------------------------------------------------------|
+| Transient/lock failures        | `CannotAcquireLockException`, `PessimisticLockingFailureException`, `DeadlockLoseDataAccessException`, `CannotSerializeTransactionException`, `QueryTimeoutException` |
+| Connectivity/config failures   | `DataAccessResourceFailureException`, `CannotGetJdbcConnectionException`                                        |
+| Programming/schema errors      | `InvalidDataAccessResourceUsageException` (incl. `BadSqlGrammarException`), `TypeMismatchDataAccessException`   |
+| Uncategorized                  | `PermissionDeniedDataAccessException`, `UncategorizedDataAccessException` / `UncategorizedSQLException`         |
+| Raw JPA (not repository-proxied) | `PersistenceException`, `EntityExistsException`, `OptimisticLockException`, `PessimisticLockException`, `LockTimeoutException`, `NoResultException`, `NonUniqueResultException`, `TransactionRequiredException`, `RollbackException` |
+
+That last row matters in practice: Spring only translates JPA exceptions into the
+`org.springframework.dao` hierarchy when they're thrown from behind a `@Repository` bean under
+`PersistenceExceptionTranslationPostProcessor`. A JPA exception thrown directly from an
+`EntityManager` used outside a repository proxy (e.g. in a `@Transactional` service method) stays
+as its native `jakarta.persistence` type and goes straight to the 500 catch-all, even for cases —
+like `OptimisticLockException` — that have a dedicated 409 handler for their Spring-translated
+equivalent (`OptimisticLockingFailureException`).
+
 ### `GlobalExceptionHandler` — Spring MVC infrastructure + catch-all
 
 Extends `ResponseEntityExceptionHandler` to handle the full set of Spring MVC exceptions
@@ -377,7 +406,7 @@ per-request locale, supply a locale-aware `MessageInterpolator` in your validato
 | `INVALID_FIELD_VALUE`             | 400    | Value cannot be coerced to target type    |
 | `TYPE_MISMATCH`                   | 400    | Wrong JSON token type for target          |
 | `INTEGER_OVERFLOW`                | 400    | Numeric value outside type range          |
-| `VALIDATION_FAILED`               | 422    | Bean Validation constraint failure        |
+| `VALIDATION_FAILED`               | 422¹   | Bean Validation constraint failure        |
 | `METHOD_VALIDATION_ERROR`         | 422    | Method-level validation failure           |
 | `DUPLICATE_VALUE`                 | 409    | Unique constraint violated                |
 | `REFERENTIAL_INTEGRITY_VIOLATION` | 409    | Foreign key constraint violated           |
@@ -397,4 +426,10 @@ per-request locale, supply a locale-aware `MessageInterpolator` in your validato
 | `CONVERSION_NOT_SUPPORTED`        | 500    | No converter for property type            |
 | `PARAMETER_TYPE_MISMATCH`         | 400    | Query/path parameter type coercion failed |
 | `MESSAGE_NOT_WRITABLE`            | 500    | Response body could not be serialised     |
+| `ERROR_RESPONSE`                  | varies | `ErrorResponseException` with no dedicated code (status comes from the exception itself) |
 | `INTERNAL_SERVER_ERROR`           | 500    | Unexpected exception                      |
+
+¹ `VALIDATION_FAILED` is 422 for `MethodArgumentNotValidException` /
+`HandlerMethodValidationException` (handled by `ValidationExceptionHandler`), but 400 for a plain
+`BindException` (e.g. `@ModelAttribute` binding failures), which falls through to
+`GlobalExceptionHandler`'s default `ResponseEntityExceptionHandler` handling.

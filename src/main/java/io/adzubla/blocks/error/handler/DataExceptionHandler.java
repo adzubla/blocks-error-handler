@@ -40,6 +40,31 @@ import java.util.regex.Pattern;
  *
  * <p>JPA's {@code EntityNotFoundException} is handled separately by
  * {@link JpaEntityNotFoundExceptionHandler}, which is only registered when JPA is on the classpath.
+ *
+ * <p><b>Not handled here.</b> Every other {@code org.springframework.dao.DataAccessException}
+ * subtype, and every raw JPA/JDBC exception that Spring's exception translation doesn't reach,
+ * falls through to {@link GlobalExceptionHandler}'s {@code @ExceptionHandler(Exception.class)}
+ * catch-all: HTTP 500, {@code code=INTERNAL_SERVER_ERROR}, a generic client-facing detail message,
+ * and the full exception (including any raw SQL or driver-specific detail in the cause chain)
+ * logged server-side at {@code ERROR}. Notable examples that land there instead of a 4xx response:
+ * <ul>
+ *   <li>Transient/lock failures — {@code CannotAcquireLockException},
+ *       {@code PessimisticLockingFailureException}, {@code DeadlockLoseDataAccessException},
+ *       {@code CannotSerializeTransactionException}, {@code QueryTimeoutException}
+ *   <li>Connectivity/config failures — {@code DataAccessResourceFailureException},
+ *       {@code CannotGetJdbcConnectionException}
+ *   <li>Programming/schema errors — {@code InvalidDataAccessResourceUsageException} (including
+ *       {@code BadSqlGrammarException}), {@code TypeMismatchDataAccessException}
+ *   <li>{@code PermissionDeniedDataAccessException}, {@code UncategorizedDataAccessException} /
+ *       {@code UncategorizedSQLException} (vendor {@code SQLException} Spring couldn't classify)
+ *   <li>Raw JPA exceptions not routed through a Spring Data repository proxy —
+ *       {@code jakarta.persistence.PersistenceException}, {@code EntityExistsException},
+ *       {@code OptimisticLockException}, {@code PessimisticLockException},
+ *       {@code LockTimeoutException}, {@code NoResultException}, {@code NonUniqueResultException},
+ *       {@code TransactionRequiredException}, {@code RollbackException} — these are only translated
+ *       into the {@code org.springframework.dao} hierarchy above when thrown from behind a
+ *       {@code @Repository} bean under {@code PersistenceExceptionTranslationPostProcessor}
+ * </ul>
  */
 @RestControllerAdvice
 @Order(Ordered.HIGHEST_PRECEDENCE)

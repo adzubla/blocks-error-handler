@@ -11,7 +11,9 @@ import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.*;
 import org.springframework.http.converter.HttpMessageNotWritableException;
+import org.springframework.validation.BindException;
 import org.springframework.validation.method.MethodValidationException;
+import org.springframework.web.ErrorResponseException;
 import org.springframework.web.HttpMediaTypeNotAcceptableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -122,6 +124,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         }
         if (ex instanceof MethodValidationException) {
             return ErrorCode.METHOD_VALIDATION_ERROR.name();
+        }
+        if (ex instanceof BindException) {
+            return ErrorCode.VALIDATION_FAILED.name();
+        }
+        if (ex instanceof ErrorResponseException) {
+            return ErrorCode.ERROR_RESPONSE.name();
         }
         return ErrorCode.INTERNAL_SERVER_ERROR.name();
     }
