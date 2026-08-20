@@ -40,7 +40,7 @@ public class JpaEntityNotFoundExceptionHandler {
 
     @ExceptionHandler(EntityNotFoundException.class)
     public ResponseEntity<ProblemDetail> handleEntityNotFound(EntityNotFoundException ex) {
-        log.debug("Entity not found: {}", ex.getMessage());
+        log.debug("{} {}: Entity not found: {}", HttpStatus.NOT_FOUND.value(), ErrorCode.RESOURCE_NOT_FOUND, ex.getMessage());
         var locale = LocaleContextHolder.getLocale();
         var problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND,
                 messageSource.getMessage("error.resource-not-found.detail", null, locale));

@@ -58,16 +58,23 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @Override
     protected ResponseEntity<Object> handleExceptionInternal(
             Exception ex, Object body, HttpHeaders headers, HttpStatusCode statusCode, WebRequest request) {
+        var code = codeFor(ex);
+        if (statusCode.is5xxServerError()) {
+            log.error("Unexpected error handling request, responding {} {}", statusCode.value(), code, ex);
+        } else {
+            log.warn("{} {}: {}", statusCode.value(), code, ex.getMessage());
+            log.trace("Stack trace:", ex);
+        }
         var result = super.handleExceptionInternal(ex, body, headers, statusCode, request);
         if (result != null && result.getBody() instanceof ProblemDetail pd) {
-            pd.setProperty("code", codeFor(ex));
+            pd.setProperty("code", code);
         }
         return result;
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ProblemDetail> handleUnexpected(Exception ex) {
-        log.error("Unexpected error", ex);
+        log.error("{} {}: Unexpected error", HttpStatus.INTERNAL_SERVER_ERROR.value(), ErrorCode.INTERNAL_SERVER_ERROR, ex);
         var locale = LocaleContextHolder.getLocale();
         var problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,
                 messageSource.getMessage("error.internal.detail", null, locale));

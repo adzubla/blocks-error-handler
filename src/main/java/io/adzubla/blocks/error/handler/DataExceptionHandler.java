@@ -92,61 +92,73 @@ public class DataExceptionHandler {
 
     @ExceptionHandler(DuplicateKeyException.class)
     public ResponseEntity<ProblemDetail> handleDuplicateKey(DuplicateKeyException ex) {
+        var status = HttpStatus.CONFLICT;
         var rootMessage = Objects.requireNonNullElse(ex.getMostSpecificCause().getMessage(), "");
         var uniqueMatcher = UNIQUE_CONSTRAINT.matcher(rootMessage);
         var constraint = uniqueMatcher.find() ? uniqueMatcher.group(1) : "unknown";
-        log.warn("Duplicate key violation on constraint '{}': {}", constraint, rootMessage);
-        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, msg("error.duplicate-value.detail"));
+        log.warn("{} {}: Duplicate key violation on constraint '{}': {}",
+                status.value(), ErrorCode.DUPLICATE_VALUE, constraint, rootMessage);
+        var problem = ProblemDetail.forStatusAndDetail(status, msg("error.duplicate-value.detail"));
         problem.setTitle(msg("error.duplicate-value.title"));
         problem.setProperty("code", ErrorCode.DUPLICATE_VALUE.name());
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+        return ResponseEntity.status(status).body(problem);
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ProblemDetail> handleDataIntegrityViolation(
             DataIntegrityViolationException ex) {
+        var status = HttpStatus.CONFLICT;
         var rootMessage = Objects.requireNonNullElse(ex.getMostSpecificCause().getMessage(), "");
 
         var uniqueMatcher = UNIQUE_CONSTRAINT.matcher(rootMessage);
         if (uniqueMatcher.find()) {
-            log.warn("Unique constraint violation on '{}': {}", uniqueMatcher.group(1), rootMessage);
-            var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, msg("error.duplicate-value.detail"));
+            log.warn("{} {}: Unique constraint violation on '{}': {}",
+                    status.value(), ErrorCode.DUPLICATE_VALUE, uniqueMatcher.group(1), rootMessage);
+            var problem = ProblemDetail.forStatusAndDetail(status, msg("error.duplicate-value.detail"));
             problem.setTitle(msg("error.duplicate-value.title"));
             problem.setProperty("code", ErrorCode.DUPLICATE_VALUE.name());
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+            return ResponseEntity.status(status).body(problem);
         }
 
         var fkMatcher = FK_CONSTRAINT.matcher(rootMessage);
         if (fkMatcher.find()) {
-            log.warn("Foreign key constraint violation on '{}': {}", fkMatcher.group(1), rootMessage);
-            var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, msg("error.referential-integrity.detail"));
+            log.warn("{} {}: Foreign key constraint violation on '{}': {}",
+                    status.value(), ErrorCode.REFERENTIAL_INTEGRITY_VIOLATION,
+                    fkMatcher.group(1), rootMessage);
+            var problem = ProblemDetail.forStatusAndDetail(status, msg("error.referential-integrity.detail"));
             problem.setTitle(msg("error.referential-integrity.title"));
             problem.setProperty("code", ErrorCode.REFERENTIAL_INTEGRITY_VIOLATION.name());
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+            return ResponseEntity.status(status).body(problem);
         }
 
-        log.warn("Unclassified data integrity violation: {}", rootMessage);
-        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, msg("error.data-integrity.detail"));
+        log.warn("{} {}: Unclassified data integrity violation ({}): {}",
+                status.value(), ErrorCode.DATA_INTEGRITY_VIOLATION,
+                ex.getClass().getSimpleName(), rootMessage);
+        log.trace("Stack trace:", ex);
+        var problem = ProblemDetail.forStatusAndDetail(status, msg("error.data-integrity.detail"));
         problem.setTitle(msg("error.data-integrity.title"));
         problem.setProperty("code", ErrorCode.DATA_INTEGRITY_VIOLATION.name());
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+        return ResponseEntity.status(status).body(problem);
     }
 
     @ExceptionHandler(EmptyResultDataAccessException.class)
     public ResponseEntity<ProblemDetail> handleEmptyResult(EmptyResultDataAccessException ex) {
-        log.debug("Empty result: {}", ex.getMessage());
-        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, msg("error.resource-not-found.detail"));
+        var status = HttpStatus.NOT_FOUND;
+        log.debug("{} {}: Empty result: {}", status.value(), ErrorCode.RESOURCE_NOT_FOUND, ex.getMessage());
+        var problem = ProblemDetail.forStatusAndDetail(status, msg("error.resource-not-found.detail"));
         problem.setTitle(msg("error.resource-not-found.title"));
         problem.setProperty("code", ErrorCode.RESOURCE_NOT_FOUND.name());
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
+        return ResponseEntity.status(status).body(problem);
     }
 
     @ExceptionHandler(OptimisticLockingFailureException.class)
     public ResponseEntity<ProblemDetail> handleOptimisticLockingFailure(OptimisticLockingFailureException ex) {
-        log.warn("Optimistic locking failure: {}", ex.getMessage());
-        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, msg("error.optimistic-locking.detail"));
+        var status = HttpStatus.CONFLICT;
+        log.warn("{} {}: Optimistic locking failure: {}",
+                status.value(), ErrorCode.OPTIMISTIC_LOCKING_FAILURE, ex.getMessage());
+        var problem = ProblemDetail.forStatusAndDetail(status, msg("error.optimistic-locking.detail"));
         problem.setTitle(msg("error.optimistic-locking.title"));
         problem.setProperty("code", ErrorCode.OPTIMISTIC_LOCKING_FAILURE.name());
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+        return ResponseEntity.status(status).body(problem);
     }
 }

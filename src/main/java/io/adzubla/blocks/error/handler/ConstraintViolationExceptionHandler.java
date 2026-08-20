@@ -55,7 +55,8 @@ public class ConstraintViolationExceptionHandler {
                 ))
                 .toList();
 
-        log.debug("Constraint violation with {} violation(s)", violations.size());
+        log.debug("{} {}: Constraint violation with {} violation(s)",
+                HttpStatus.UNPROCESSABLE_CONTENT.value(), ErrorCode.VALIDATION_FAILED, violations.size());
         log.trace("Stack trace:", ex);
 
         var locale = LocaleContextHolder.getLocale();

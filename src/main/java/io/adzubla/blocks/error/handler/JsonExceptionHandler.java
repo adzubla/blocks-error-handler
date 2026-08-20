@@ -101,32 +101,42 @@ public class JsonExceptionHandler {
         var cause = ex.getCause();
 
         if (cause instanceof UnrecognizedPropertyException upe) {
-            log.debug("Unknown JSON field: {}", upe.getPropertyName());
+            var problem = unrecognizedProperty(upe);
+            log.debug("{} {}: Unknown JSON field: {}",
+                    HttpStatus.BAD_REQUEST.value(), problem.code(), upe.getPropertyName());
             log.trace("Stack trace:", upe);
-            return badRequest(unrecognizedProperty(upe).toProblemDetail());
+            return badRequest(problem.toProblemDetail());
         }
         if (cause instanceof InvalidFormatException ife) {
-            log.debug("Invalid JSON format at path {}: {}", jsonPath(ife.getPath()), ife.getMessage());
+            var problem = invalidFormat(ife);
+            log.debug("{} {}: Invalid JSON format at path {}: {}",
+                    HttpStatus.BAD_REQUEST.value(), problem.code(), jsonPath(ife.getPath()), ife.getMessage());
             log.trace("Stack trace:", ife);
-            return badRequest(invalidFormat(ife).toProblemDetail());
+            return badRequest(problem.toProblemDetail());
         }
         if (cause instanceof MismatchedInputException mie) {
-            log.debug("Mismatched JSON input at path {}: {}", jsonPath(mie.getPath()), mie.getMessage());
+            var problem = mismatchedInput(mie);
+            log.debug("{} {}: Mismatched JSON input at path {}: {}",
+                    HttpStatus.BAD_REQUEST.value(), problem.code(), jsonPath(mie.getPath()), mie.getMessage());
             log.trace("Stack trace:", mie);
-            return badRequest(mismatchedInput(mie).toProblemDetail());
+            return badRequest(problem.toProblemDetail());
         }
         if (cause instanceof InputCoercionException ice) {
-            log.debug("Integer overflow: {}", ice.getMessage());
+            var problem = coercionError(ice);
+            log.debug("{} {}: Integer overflow: {}", HttpStatus.BAD_REQUEST.value(), problem.code(), ice.getMessage());
             log.trace("Stack trace:", ice);
-            return badRequest(coercionError(ice).toProblemDetail());
+            return badRequest(problem.toProblemDetail());
         }
         if (cause instanceof StreamReadException sre) {
-            log.debug("JSON parse error: {}", sre.getMessage());
+            var problem = parseError(sre);
+            log.debug("{} {}: JSON parse error: {}", HttpStatus.BAD_REQUEST.value(), problem.code(), sre.getMessage());
             log.trace("Stack trace:", sre);
-            return badRequest(parseError(sre).toProblemDetail());
+            return badRequest(problem.toProblemDetail());
         }
 
-        log.warn("Unreadable request body", ex);
+        log.debug("{} {}: Unreadable request body: {}",
+                HttpStatus.BAD_REQUEST.value(), ErrorCode.MALFORMED_REQUEST_BODY, ex.getMessage());
+        log.trace("Stack trace:", ex);
         var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, msg("error.malformed-body.detail"));
         problem.setTitle(msg("error.malformed-body.title"));
         problem.setProperty("code", ErrorCode.MALFORMED_REQUEST_BODY.name());

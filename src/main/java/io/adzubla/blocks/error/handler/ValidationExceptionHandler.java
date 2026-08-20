@@ -76,7 +76,8 @@ public class ValidationExceptionHandler {
                 })
                 .toList();
 
-        log.debug("Validation failed with {} violation(s)", violations.size());
+        log.debug("{} {}: Validation failed with {} violation(s)",
+                HttpStatus.UNPROCESSABLE_CONTENT.value(), ErrorCode.VALIDATION_FAILED, violations.size());
         log.trace("Stack trace:", ex);
         return unprocessable(violations);
     }
@@ -99,7 +100,8 @@ public class ValidationExceptionHandler {
                         }))
                 .toList();
 
-        log.debug("Handler method validation failed with {} violation(s)", violations.size());
+        log.debug("{} {}: Handler method validation failed with {} violation(s)",
+                HttpStatus.UNPROCESSABLE_CONTENT.value(), ErrorCode.VALIDATION_FAILED, violations.size());
         log.trace("Stack trace:", ex);
         return unprocessable(violations);
     }
