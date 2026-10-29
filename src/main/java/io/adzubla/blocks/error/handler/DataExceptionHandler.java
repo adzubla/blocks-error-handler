@@ -4,7 +4,6 @@ import io.adzubla.blocks.error.ErrorCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.MessageSource;
-import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -76,14 +75,14 @@ public class DataExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(DataExceptionHandler.class);
 
-    private final MessageSource messageSource;
+    private final ErrorMessages messages;
 
     public DataExceptionHandler(MessageSource messageSource) {
-        this.messageSource = messageSource;
+        this.messages = new ErrorMessages(messageSource);
     }
 
     private String msg(String key) {
-        return messageSource.getMessage(key, null, LocaleContextHolder.getLocale());
+        return messages.get(key);
     }
 
     // PostgreSQL: ERROR: duplicate key value violates unique constraint "constraint_name"

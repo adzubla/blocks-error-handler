@@ -4,7 +4,6 @@ import io.adzubla.blocks.error.ErrorCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.MessageSource;
-import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -51,7 +50,7 @@ public class JsonExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(JsonExceptionHandler.class);
 
-    private final MessageSource messageSource;
+    private final ErrorMessages messages;
 
     private static final Map<Class<?>, String> NUMERIC_RANGES = Map.of(
             byte.class,    "[" + Byte.MIN_VALUE    + ", " + Byte.MAX_VALUE    + "]",
@@ -65,11 +64,11 @@ public class JsonExceptionHandler {
     );
 
     public JsonExceptionHandler(MessageSource messageSource) {
-        this.messageSource = messageSource;
+        this.messages = new ErrorMessages(messageSource);
     }
 
     private String msg(String key, Object... args) {
-        return messageSource.getMessage(key, args, LocaleContextHolder.getLocale());
+        return messages.get(key, args);
     }
 
     // Common shape for every 400 response from this handler.

@@ -8,9 +8,12 @@ import org.springframework.beans.TypeMismatchException;
 import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.core.Ordered;
+import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.*;
 import org.springframework.http.converter.HttpMessageNotWritableException;
+import org.springframework.util.ClassUtils;
+import org.springframework.util.StringUtils;
 import org.springframework.validation.BindException;
 import org.springframework.validation.method.MethodValidationException;
 import org.springframework.web.ErrorResponseException;
@@ -21,6 +24,7 @@ import org.springframework.web.bind.MissingPathVariableException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
@@ -30,6 +34,10 @@ import org.springframework.web.multipart.support.MissingServletRequestPartExcept
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Stream;
 
 /**
  * Catch-all handler covering Spring MVC infrastructure exceptions and any {@link Exception}
@@ -41,7 +49,18 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
  * {@link #handleExceptionInternal} with a stable {@link ErrorCode} string.
  *
  * <p>A final {@code @ExceptionHandler(Exception.class)} catch-all returns 500
- * {@code INTERNAL_SERVER_ERROR} and logs the stack trace at {@code ERROR} level.
+ * {@code INTERNAL_SERVER_ERROR} and logs the stack trace at {@code ERROR} level, with two
+ * exceptions:
+ * <ul>
+ *   <li>Exceptions annotated with {@link ResponseStatus @ResponseStatus} (directly or on a
+ *       superclass) keep their declared status and reason, with {@code code=ERROR_RESPONSE} —
+ *       mirroring what Spring's {@code ResponseStatusExceptionResolver} would have done had this
+ *       catch-all not claimed them first.
+ *   <li>Spring Security's {@code AccessDeniedException} and {@code AuthenticationException} (e.g.
+ *       from {@code @PreAuthorize} method security) are rethrown so they propagate to Spring
+ *       Security's {@code ExceptionTranslationFilter} and produce its 401/403 response. These are
+ *       detected by class name, so Spring Security remains an optional dependency.
+ * </ul>
  */
 @RestControllerAdvice
 @Order(Ordered.LOWEST_PRECEDENCE)
@@ -49,10 +68,20 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    // Spring Security exceptions that must reach ExceptionTranslationFilter instead of becoming a 500.
+    private static final List<Class<?>> PROPAGATED_EXCEPTIONS = Stream.of(
+                    "org.springframework.security.access.AccessDeniedException",
+                    "org.springframework.security.core.AuthenticationException")
+            .map(GlobalExceptionHandler::loadOptionalClass)
+            .filter(Objects::nonNull)
+            .toList();
+
     private final MessageSource messageSource;
+    private final ErrorMessages messages;
 
     public GlobalExceptionHandler(MessageSource messageSource) {
         this.messageSource = messageSource;
+        this.messages = new ErrorMessages(messageSource);
     }
 
     @Override
@@ -73,14 +102,48 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ProblemDetail> handleUnexpected(Exception ex) {
+    public ResponseEntity<ProblemDetail> handleUnexpected(Exception ex) throws Exception {
+        for (var type : PROPAGATED_EXCEPTIONS) {
+            if (type.isInstance(ex)) {
+                throw ex;
+            }
+        }
+        var responseStatus = AnnotatedElementUtils.findMergedAnnotation(ex.getClass(), ResponseStatus.class);
+        if (responseStatus != null) {
+            return handleAnnotatedStatus(ex, responseStatus);
+        }
         log.error("{} {}: Unexpected error", HttpStatus.INTERNAL_SERVER_ERROR.value(), ErrorCode.INTERNAL_SERVER_ERROR, ex);
-        var locale = LocaleContextHolder.getLocale();
         var problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,
-                messageSource.getMessage("error.internal.detail", null, locale));
-        problem.setTitle(messageSource.getMessage("error.internal.title", null, locale));
+                messages.get("error.internal.detail"));
+        problem.setTitle(messages.get("error.internal.title"));
         problem.setProperty("code", ErrorCode.INTERNAL_SERVER_ERROR.name());
         return ResponseEntity.internalServerError().body(problem);
+    }
+
+    private ResponseEntity<ProblemDetail> handleAnnotatedStatus(Exception ex, ResponseStatus responseStatus) {
+        var status = responseStatus.code();
+        var code = ErrorCode.ERROR_RESPONSE;
+        if (status.is5xxServerError()) {
+            log.error("{} {}: Unexpected error", status.value(), code, ex);
+        } else {
+            log.warn("{} {}: {}", status.value(), code, ex.getMessage());
+            log.trace("Stack trace:", ex);
+        }
+        var problem = ProblemDetail.forStatus(status);
+        var reason = responseStatus.reason();
+        if (StringUtils.hasText(reason)) {
+            // Like ResponseStatusExceptionResolver, the reason may be a message code.
+            problem.setDetail(messageSource.getMessage(reason, null, reason, LocaleContextHolder.getLocale()));
+        }
+        problem.setProperty("code", code.name());
+        return ResponseEntity.status(status).body(problem);
+    }
+
+    private static Class<?> loadOptionalClass(String className) {
+        var classLoader = GlobalExceptionHandler.class.getClassLoader();
+        return ClassUtils.isPresent(className, classLoader)
+                ? ClassUtils.resolveClassName(className, classLoader)
+                : null;
     }
 
     private static String codeFor(Exception ex) {

@@ -6,7 +6,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.context.MessageSource;
-import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -32,19 +31,18 @@ public class JpaEntityNotFoundExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(JpaEntityNotFoundExceptionHandler.class);
 
-    private final MessageSource messageSource;
+    private final ErrorMessages messages;
 
     public JpaEntityNotFoundExceptionHandler(MessageSource messageSource) {
-        this.messageSource = messageSource;
+        this.messages = new ErrorMessages(messageSource);
     }
 
     @ExceptionHandler(EntityNotFoundException.class)
     public ResponseEntity<ProblemDetail> handleEntityNotFound(EntityNotFoundException ex) {
         log.debug("{} {}: Entity not found: {}", HttpStatus.NOT_FOUND.value(), ErrorCode.RESOURCE_NOT_FOUND, ex.getMessage());
-        var locale = LocaleContextHolder.getLocale();
         var problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND,
-                messageSource.getMessage("error.resource-not-found.detail", null, locale));
-        problem.setTitle(messageSource.getMessage("error.resource-not-found.title", null, locale));
+                messages.get("error.resource-not-found.detail"));
+        problem.setTitle(messages.get("error.resource-not-found.title"));
         problem.setProperty("code", ErrorCode.RESOURCE_NOT_FOUND.name());
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
     }

@@ -4,7 +4,6 @@ import io.adzubla.blocks.error.ErrorCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.MessageSource;
-import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -50,10 +49,10 @@ public class ValidationExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ValidationExceptionHandler.class);
 
-    private final MessageSource messageSource;
+    private final ErrorMessages messages;
 
     public ValidationExceptionHandler(MessageSource messageSource) {
-        this.messageSource = messageSource;
+        this.messages = new ErrorMessages(messageSource);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -107,10 +106,9 @@ public class ValidationExceptionHandler {
     }
 
     private ResponseEntity<ProblemDetail> unprocessable(List<Map<String, String>> violations) {
-        var locale = LocaleContextHolder.getLocale();
         var problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT,
-                messageSource.getMessage("error.validation-failed.detail", null, locale));
-        problem.setTitle(messageSource.getMessage("error.validation-failed.title", null, locale));
+                messages.get("error.validation-failed.detail"));
+        problem.setTitle(messages.get("error.validation-failed.title"));
         problem.setProperty("code", ErrorCode.VALIDATION_FAILED.name());
         problem.setProperty("violations", violations);
         return ResponseEntity.unprocessableContent().body(problem);

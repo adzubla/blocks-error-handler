@@ -5,6 +5,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpServletResponseWrapper;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -26,9 +27,10 @@ import java.io.IOException;
  * <p>By default the header is added to every response, success and error alike, and is written
  * <em>before</em> delegating further so it is always present regardless of whether a downstream
  * handler commits the response early. When {@link TraceIdHeaderProperties#isErrorOnly()} is
- * {@code true} the header is only added to error responses (status 400+); this requires waiting
- * for the downstream handler to finish so the final status is known, so the header will be
- * silently omitted if a downstream handler commits the response before returning.
+ * {@code true} the header is only added to error responses (status 400+). Since the response body
+ * (and therefore the commit) usually follows immediately after the status is set, the response is
+ * wrapped so the header is added at the moment an error status is set via {@code setStatus} or
+ * {@code sendError} — while headers can still be written.
  *
  * <p>If the {@link io.micrometer.tracing.Tracer} bean is absent the filter delegates without
  * setting the header, making the Micrometer Tracing bean itself optional at runtime. However, the
@@ -62,14 +64,47 @@ public class TraceIdResponseHeaderFilter extends OncePerRequestFilter {
             return;
         }
 
+        var traceId = span.context().traceId();
         if (errorOnly) {
-            filterChain.doFilter(request, response);
-            if (response.getStatus() >= 400 && !response.isCommitted()) {
-                response.setHeader(HEADER_NAME, span.context().traceId());
-            }
+            filterChain.doFilter(request, new ErrorOnlyTraceIdResponse(response, traceId));
         } else {
-            response.setHeader(HEADER_NAME, span.context().traceId());
+            response.setHeader(HEADER_NAME, traceId);
             filterChain.doFilter(request, response);
+        }
+    }
+
+    // Adds the trace ID header as soon as an error status is set, before the body commits the response.
+    private static final class ErrorOnlyTraceIdResponse extends HttpServletResponseWrapper {
+
+        private final String traceId;
+
+        ErrorOnlyTraceIdResponse(HttpServletResponse response, String traceId) {
+            super(response);
+            this.traceId = traceId;
+        }
+
+        @Override
+        public void setStatus(int sc) {
+            addTraceIdIfError(sc);
+            super.setStatus(sc);
+        }
+
+        @Override
+        public void sendError(int sc) throws IOException {
+            addTraceIdIfError(sc);
+            super.sendError(sc);
+        }
+
+        @Override
+        public void sendError(int sc, String msg) throws IOException {
+            addTraceIdIfError(sc);
+            super.sendError(sc, msg);
+        }
+
+        private void addTraceIdIfError(int sc) {
+            if (sc >= 400 && !isCommitted()) {
+                setHeader(HEADER_NAME, traceId);
+            }
         }
     }
 }

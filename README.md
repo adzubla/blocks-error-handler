@@ -221,7 +221,14 @@ equivalent (`OptimisticLockingFailureException`).
 Extends `ResponseEntityExceptionHandler` to handle the full set of Spring MVC exceptions
 (405, 415, 400, 404, 413, 503, …) and adds a stable `code` field to each. A final
 `@ExceptionHandler(Exception.class)` returns 500 `INTERNAL_SERVER_ERROR` and logs
-the stack trace at `ERROR` level.
+the stack trace at `ERROR` level, except for:
+
+- **`@ResponseStatus`-annotated exceptions** (directly or via a superclass) — these keep their
+  declared status, with `code=ERROR_RESPONSE` and the annotation's `reason` (resolved as a message
+  code if one matches) as `detail`.
+- **Spring Security's `AccessDeniedException` / `AuthenticationException`** (e.g. thrown by
+  `@PreAuthorize`) — these are rethrown so Spring Security's `ExceptionTranslationFilter` produces
+  its usual 401/403 response. Spring Security stays an optional dependency.
 
 ```json
 {
@@ -353,24 +360,31 @@ When either limit is exceeded Spring throws `MaxUploadSizeExceededException`, wh
 
 ## Internationalisation (i18n)
 
-Every `title` and `detail` field in the error body is resolved through Spring's `MessageSource`,
-with the locale read from `LocaleContextHolder` at exception-handling time. Translating error
-messages to a new language requires only a properties file — no code changes.
+Every `title` and `detail` field in the error body is resolved with the locale read from
+`LocaleContextHolder` at exception-handling time. Each key is looked up first in the
+application's own `MessageSource`, then in the library's bundled messages. Translating or
+rewording error messages requires only a properties file — no code changes.
+
+The library's bundle lives under the namespaced basename `io/adzubla/blocks/error/messages`, so it
+never clashes with the application's `messages.properties`, and it is found regardless of the
+application's `spring.messages.basename` setting.
 
 ### Bundled locales
 
-| File                        | Locale              |
-|-----------------------------|---------------------|
-| `messages.properties`       | English (fallback)  |
-| `messages_pt_BR.properties` | Portuguese — Brazil |
+| File (under `io/adzubla/blocks/error/`) | Locale              |
+|-----------------------------------------|---------------------|
+| `messages.properties`                   | English (fallback)  |
+| `messages_pt_BR.properties`             | Portuguese — Brazil |
 
-### Adding a locale
+### Overriding messages and adding a locale
 
-Create `messages_<language>[_<COUNTRY>].properties` alongside the existing files and translate
-every key. Spring resolves the closest-matching bundle for the request locale automatically.
+Define any key in your application's own message bundle (by default `messages*.properties`) and it
+takes precedence over the library's text. Keys you don't define keep the library's text. To add a
+language, translate the keys into the matching locale file of your bundle. Spring resolves the
+closest-matching file for the request locale automatically.
 
 ```properties
-# src/main/resources/messages_es.properties
+# your application's src/main/resources/messages_es.properties
 error.validation-failed.title=Validación fallida
 error.validation-failed.detail=Uno o más campos no pasaron la validación
 error.resource-not-found.title=Recurso no encontrado
@@ -378,19 +392,11 @@ error.resource-not-found.detail=El recurso solicitado no fue encontrado.
 # … remaining keys …
 ```
 
-If you package this library as a JAR and your application defines its own `messages.properties`,
-list both basenames so Spring merges them:
-
-```properties
-spring.messages.basename=messages,classpath:io/adzubla/blocks/error/messages
-spring.messages.encoding=UTF-8
-```
-
 ### Locale resolution
 
 By default, Spring MVC's `AcceptHeaderLocaleResolver` maps the `Accept-Language` request header
 to a `java.util.Locale`. When the header is absent or no bundle matches, Spring falls back to the
-JVM default locale and then to the root `messages.properties`.
+JVM default locale and then to the root (English) bundle.
 
 To resolve locale from a cookie or session instead, declare a `LocaleResolver` bean:
 
