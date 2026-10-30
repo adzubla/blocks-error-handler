@@ -47,8 +47,8 @@ every failure mode your API can encounter:
 
 This library declares the optional dependencies above as Maven `<optional>true</optional>`, so they
 are **not** pulled transitively into your application — add the ones you need yourself. Each
-feature that depends on one is gated behind `@ConditionalOnClass`, so the corresponding handler
-bean simply isn't registered when the dependency is absent; everything else (JSON parsing errors,
+feature that depends on one is registered under an `@ConditionalOnClass` condition, so the
+corresponding handler bean simply isn't registered when the dependency is absent; everything else (JSON parsing errors,
 Spring MVC validation via `@Valid`, `GlobalExceptionHandler`, `DataExceptionHandler`'s
 JDBC-level exceptions) works with just `spring-boot-starter-webmvc`.
 
@@ -64,15 +64,54 @@ Add this module as a dependency:
 </dependency>
 ```
 
-The JAR ships
-`META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`,
-which Spring Boot reads at startup to activate `JsonExceptionHandler`,
+The JAR ships two Spring Boot auto-configurations — `ErrorHandlerAutoConfiguration` and
+`ErrorTraceAutoConfiguration` — which register `JsonExceptionHandler`,
 `ValidationExceptionHandler`, `ConstraintViolationExceptionHandler`, `DataExceptionHandler`,
 `JpaEntityNotFoundExceptionHandler`, `GlobalExceptionHandler`, `ProblemDetailTraceAdvice`, and
-`TraceIdResponseHeaderFilter` automatically — no `@Import` or `@ComponentScan` required.
-`ConstraintViolationExceptionHandler`, `JpaEntityNotFoundExceptionHandler`,
-`ProblemDetailTraceAdvice`, and `TraceIdResponseHeaderFilter` are each gated behind
-`@ConditionalOnClass` and back off silently when their optional dependency isn't present.
+`TraceIdResponseHeaderFilter` automatically — no `@Import` or `@ComponentScan` required. They are
+active in servlet web applications only. `ConstraintViolationExceptionHandler`,
+`JpaEntityNotFoundExceptionHandler`, `ProblemDetailTraceAdvice`, and `TraceIdResponseHeaderFilter`
+back off silently when their optional dependency isn't present.
+
+### Disabling or replacing a handler
+
+Every bean can be switched off with a property, and the whole library with
+`blocks.error.enabled=false`. Exceptions a disabled handler would have covered fall through to the
+next one — ultimately `GlobalExceptionHandler`, or Spring's defaults if that is disabled too.
+
+| Property                                    | Bean                                  |
+|---------------------------------------------|---------------------------------------|
+| `blocks.error.enabled`                      | everything below                      |
+| `blocks.error.json.enabled`                 | `JsonExceptionHandler`                |
+| `blocks.error.validation.enabled`           | `ValidationExceptionHandler`          |
+| `blocks.error.constraint-violation.enabled` | `ConstraintViolationExceptionHandler` |
+| `blocks.error.data.enabled`                 | `DataExceptionHandler`                |
+| `blocks.error.jpa.enabled`                  | `JpaEntityNotFoundExceptionHandler`   |
+| `blocks.error.global.enabled`               | `GlobalExceptionHandler`              |
+| `blocks.error.trace.body.enabled`           | `ProblemDetailTraceAdvice`            |
+| `blocks.error.trace.header.enabled`         | `TraceIdResponseHeaderFilter`         |
+
+All default to `true`. To customise a handler instead, declare your own bean of the same type —
+typically a subclass overriding one method — and the library's bean backs off:
+
+```java
+@RestControllerAdvice
+class MyDataExceptionHandler extends DataExceptionHandler {
+
+    MyDataExceptionHandler(MessageSource messageSource, DataExceptionProperties properties) {
+        super(messageSource, properties);
+    }
+
+    @Override
+    public ResponseEntity<ProblemDetail> handleOptimisticLockingFailure(OptimisticLockingFailureException ex) {
+        // your response
+    }
+}
+```
+
+`GlobalExceptionHandler` extends `ResponseEntityExceptionHandler`, so with
+`spring.mvc.problemdetails.enabled=true` Spring Boot's own `ResponseEntityExceptionHandler` backs
+off in its favour rather than competing with it.
 
 ## What's included
 
@@ -123,7 +162,9 @@ only registered when `spring-boot-starter-validation` is on the classpath
 (`@ConditionalOnClass(ConstraintViolationException.class)`). Its `path` drops Java-only names: the
 method name is never included, and a parameter name is omitted when the violation is on a property
 of that parameter. So `create(@Valid Request request)` reports `$.name`, `find(@NotBlank String
-code)` reports `$.code`, and `tag(List<@NotBlank String> tags)` reports `$.tags[0]`.
+code)` reports `$.code`, and `tag(List<@NotBlank String> tags)` reports `$.tags[0]`. A violation
+on a method's *return value* means the server produced invalid data, so it is answered as 500
+`INTERNAL_SERVER_ERROR` (logged at `ERROR`) rather than 422.
 
 Each violation's `path` is a JSONPath-style location in the client's request input — the body, a
 path variable, or a query parameter — so every `VALIDATION_FAILED` response uses one notation no
@@ -422,8 +463,11 @@ error.resource-not-found.detail=El recurso solicitado no fue encontrado.
 ### Locale resolution
 
 By default, Spring MVC's `AcceptHeaderLocaleResolver` maps the `Accept-Language` request header
-to a `java.util.Locale`. When the header is absent or no bundle matches, Spring falls back to the
-JVM default locale and then to the root (English) bundle.
+to a `java.util.Locale`. When the header names a locale with no matching bundle (e.g. `fr`), the
+library falls back to the root (English) bundle — never to the server's JVM locale, so a server
+running in another locale doesn't answer English-speaking clients in its own language. When the
+header is absent, the resolver itself uses the JVM default locale; to pin that too, set
+`spring.web.locale=en` (or declare a `LocaleResolver`, below).
 
 To resolve locale from a cookie or session instead, declare a `LocaleResolver` bean:
 

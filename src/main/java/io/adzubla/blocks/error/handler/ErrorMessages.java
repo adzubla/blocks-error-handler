@@ -24,6 +24,9 @@ final class ErrorMessages {
     static {
         DEFAULTS.setBasename(BASENAME);
         DEFAULTS.setDefaultEncoding(StandardCharsets.UTF_8.name());
+        // A request locale with no matching bundle gets the English root bundle, not the server's
+        // JVM locale (e.g. Accept-Language: en on a pt_BR host must not get Portuguese).
+        DEFAULTS.setFallbackToSystemLocale(false);
     }
 
     private final MessageSource applicationMessages;

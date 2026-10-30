@@ -6,6 +6,7 @@ import com.example.demo.product.ProductRepository;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -299,6 +300,16 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.violations[0].path").value("$.items[1]"));
+    }
+
+    @Test
+    void serviceLayerReturnValueViolation_returnsInternalServerError() throws Exception {
+        mvc.perform(post("/test/constraint-violation/return-value"))
+                .andDo(print())
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"))
+                .andExpect(jsonPath("$.violations").doesNotExist())
+                .andExpect(jsonPath("$.traceId").isString());
     }
 
     @Test
@@ -692,6 +703,11 @@ class ValidationExceptionHandlerIT {
 
         void requireNonBlankItems(List<@NotBlank String> items) {
         }
+
+        @NotNull
+        String brokenLookup() {
+            return null;
+        }
     }
 
     record Named(@NotBlank String name) {
@@ -717,6 +733,11 @@ class ValidationExceptionHandlerIT {
         @PostMapping("/bean")
         void triggerBean() {
             service.requireValid(new Named(""));
+        }
+
+        @PostMapping("/return-value")
+        void triggerReturnValue() {
+            service.brokenLookup();
         }
 
         @PostMapping("/list")

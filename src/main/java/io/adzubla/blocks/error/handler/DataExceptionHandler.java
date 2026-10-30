@@ -3,7 +3,6 @@ package io.adzubla.blocks.error.handler;
 import io.adzubla.blocks.error.ErrorCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.MessageSource;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -75,7 +74,6 @@ import java.util.regex.Pattern;
  */
 @RestControllerAdvice
 @Order(Ordered.HIGHEST_PRECEDENCE)
-@EnableConfigurationProperties(DataExceptionProperties.class)
 public class DataExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(DataExceptionHandler.class);

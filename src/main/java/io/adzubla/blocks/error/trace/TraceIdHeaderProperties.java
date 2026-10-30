@@ -9,9 +9,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class TraceIdHeaderProperties {
 
     /**
-     * When {@code true}, the {@code X-Trace-Id} header is only added to error responses
-     * (HTTP status 400 and above). When {@code false} (the default), it is added to every
-     * response, success and error alike.
+     * Whether to add the X-Trace-Id response header only to error responses (HTTP status 400 and
+     * above) instead of to every response.
      */
     private boolean errorOnly = false;
 

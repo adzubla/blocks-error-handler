@@ -7,7 +7,6 @@ import jakarta.validation.ElementKind;
 import jakarta.validation.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.context.MessageSource;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -29,11 +28,10 @@ import java.util.Set;
  * an RFC 9457 {@link org.springframework.http.ProblemDetail} response with HTTP 422 Unprocessable
  * Content.
  *
- * <p>Split out from {@link ValidationExceptionHandler} and gated behind
- * {@link ConditionalOnClass @ConditionalOnClass(ConstraintViolationException.class)} because
+ * <p>Split out from {@link ValidationExceptionHandler} because
  * {@code jakarta.validation.ConstraintViolationException} is only on the classpath when the
- * consuming application pulls in Bean Validation (e.g. {@code spring-boot-starter-validation}).
- * Without this guard, this bean would fail to load in any application that doesn't use it.
+ * consuming application pulls in Bean Validation (e.g. {@code spring-boot-starter-validation});
+ * {@code ErrorHandlerAutoConfiguration} registers this bean only when that class is present.
  *
  * <p>Each violation's {@code path} is rendered from the Bean Validation property path in JSONPath
  * style, dropping nodes that are Java implementation details rather than client-facing names: the
@@ -42,10 +40,13 @@ import java.util.Set;
  * bodies). So {@code void create(@Valid Request request)} reports {@code $.name}, while
  * {@code void find(@NotBlank String code)} reports {@code $.code} and
  * {@code void tag(List<@NotBlank String> tags)} reports {@code $.tags[0]}.
+ *
+ * <p>A violation on a method's <em>return value</em> means the server produced invalid data, not
+ * that the client sent it, so it is answered like any unexpected error: HTTP 500
+ * {@code INTERNAL_SERVER_ERROR}, with the exception logged at {@code ERROR}.
  */
 @RestControllerAdvice
 @Order(Ordered.HIGHEST_PRECEDENCE)
-@ConditionalOnClass(ConstraintViolationException.class)
 public class ConstraintViolationExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ConstraintViolationExceptionHandler.class);
@@ -61,6 +62,9 @@ public class ConstraintViolationExceptionHandler {
         // getConstraintViolations() is null when the exception was built with only a message.
         Set<ConstraintViolation<?>> constraintViolations =
                 Objects.requireNonNullElse(ex.getConstraintViolations(), Set.of());
+        if (constraintViolations.stream().anyMatch(ConstraintViolationExceptionHandler::isReturnValueViolation)) {
+            return returnValueViolation(ex);
+        }
         var violations = constraintViolations.stream()
                 .map(violation -> Map.of(
                         "path", jsonPath(violation.getPropertyPath()),
@@ -80,6 +84,25 @@ public class ConstraintViolationExceptionHandler {
         problem.setProperty("code", ErrorCode.VALIDATION_FAILED.name());
         problem.setProperty("violations", violations);
         return ResponseEntity.unprocessableContent().body(problem);
+    }
+
+    private ResponseEntity<ProblemDetail> returnValueViolation(ConstraintViolationException ex) {
+        log.error("{} {}: Return value constraint violation",
+                HttpStatus.INTERNAL_SERVER_ERROR.value(), ErrorCode.INTERNAL_SERVER_ERROR, ex);
+        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,
+                messages.get("error.internal.detail"));
+        problem.setTitle(messages.get("error.internal.title"));
+        problem.setProperty("code", ErrorCode.INTERNAL_SERVER_ERROR.name());
+        return ResponseEntity.internalServerError().body(problem);
+    }
+
+    private static boolean isReturnValueViolation(ConstraintViolation<?> violation) {
+        for (var node : violation.getPropertyPath()) {
+            if (node.getKind() == ElementKind.RETURN_VALUE) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String jsonPath(Path propertyPath) {

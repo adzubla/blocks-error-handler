@@ -75,6 +75,14 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Build-time only: generates META-INF/spring-configuration-metadata.json so IDEs can
+             autocomplete and document the blocks.error.* properties. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Test-only: this library's own code never touches JDBC/DataSource APIs. jdbc is needed
              here solely to give the integration tests (Testcontainers-backed Postgres) a real
              connection pool (HikariCP); consumers get their own via whatever starter they choose. -->

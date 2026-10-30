@@ -9,10 +9,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class DataExceptionProperties {
 
     /**
-     * When {@code true} (the default), duplicate-key and foreign-key responses include the
-     * offending value extracted from the database error as {@code invalidValue}. Set to
-     * {@code false} to omit it — e.g. when unique constraints cover derived or server-generated
-     * columns, whose stored values the client never sent and should not see.
+     * Whether duplicate-key and foreign-key responses include the offending value extracted from
+     * the database error as 'invalidValue'. Turn off when unique or foreign-key constraints cover
+     * derived or server-generated columns, whose stored values the client never sent.
      */
     private boolean exposeInvalidValue = true;
 

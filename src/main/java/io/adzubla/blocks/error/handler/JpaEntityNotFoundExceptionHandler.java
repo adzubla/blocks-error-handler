@@ -4,7 +4,6 @@ import io.adzubla.blocks.error.ErrorCode;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.context.MessageSource;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -18,15 +17,13 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * Translates JPA's {@link EntityNotFoundException} into an RFC 9457
  * {@link org.springframework.http.ProblemDetail} response.
  *
- * <p>Split out from {@link DataExceptionHandler} and gated behind
- * {@link ConditionalOnClass @ConditionalOnClass(EntityNotFoundException.class)} because
+ * <p>Split out from {@link DataExceptionHandler} because
  * {@code jakarta.persistence.EntityNotFoundException} is only on the classpath when the consuming
- * application pulls in JPA (e.g. {@code spring-boot-starter-data-jpa}). Without this guard, this
- * bean would fail to load in any application that doesn't use JPA.
+ * application pulls in JPA (e.g. {@code spring-boot-starter-data-jpa});
+ * {@code ErrorHandlerAutoConfiguration} registers this bean only when that class is present.
  */
 @RestControllerAdvice
 @Order(Ordered.HIGHEST_PRECEDENCE)
-@ConditionalOnClass(EntityNotFoundException.class)
 public class JpaEntityNotFoundExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(JpaEntityNotFoundExceptionHandler.class);

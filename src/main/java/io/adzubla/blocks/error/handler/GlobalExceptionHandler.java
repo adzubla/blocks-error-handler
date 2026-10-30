@@ -189,6 +189,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         if (ex instanceof HttpMessageNotWritableException) {
             return ErrorCode.MESSAGE_NOT_WRITABLE.name();
         }
+        // Normally claimed first by ValidationExceptionHandler; reached only when an application
+        // disables or replaces it (blocks.error.validation.enabled=false).
         if (ex instanceof HandlerMethodValidationException) {
             return ErrorCode.VALIDATION_FAILED.name();
         }
