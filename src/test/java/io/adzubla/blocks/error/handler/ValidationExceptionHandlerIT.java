@@ -3,6 +3,8 @@ package io.adzubla.blocks.error.handler;
 import com.example.demo.DemoApplication;
 import com.example.demo.TestcontainersConfiguration;
 import com.example.demo.product.ProductRepository;
+import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
@@ -19,6 +21,8 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
@@ -275,8 +279,35 @@ class ValidationExceptionHandlerIT {
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.title").value("Validation failed"))
                 .andExpect(jsonPath("$.violations").isArray())
-                .andExpect(jsonPath("$.violations[?(@.path=~/.*value$/)]").exists())
+                .andExpect(jsonPath("$.violations[0].path").value("$.value"))
                 .andExpect(jsonPath("$.traceId").isString());
+    }
+
+    @Test
+    void serviceLayerConstraintViolation_onBeanParameterProperty_reportsPropertyPath() throws Exception {
+        mvc.perform(post("/test/constraint-violation/bean"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.violations[0].path").value("$.name"));
+    }
+
+    @Test
+    void serviceLayerConstraintViolation_onContainerElement_reportsIndexedPath() throws Exception {
+        mvc.perform(post("/test/constraint-violation/list"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.violations[0].path").value("$.items[1]"));
+    }
+
+    @Test
+    void constraintViolationWithoutViolations_returnsUnprocessableWithEmptyViolations() throws Exception {
+        mvc.perform(post("/test/constraint-violation/no-violations"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.violations").isEmpty());
     }
 
     // --- i18n ---
@@ -655,6 +686,15 @@ class ValidationExceptionHandlerIT {
 
         void requireNonBlank(@NotBlank String value) {
         }
+
+        void requireValid(@Valid Named named) {
+        }
+
+        void requireNonBlankItems(List<@NotBlank String> items) {
+        }
+    }
+
+    record Named(@NotBlank String name) {
     }
 
     @RestController
@@ -672,6 +712,22 @@ class ValidationExceptionHandlerIT {
         @PostMapping
         void trigger() {
             service.requireNonBlank("");
+        }
+
+        @PostMapping("/bean")
+        void triggerBean() {
+            service.requireValid(new Named(""));
+        }
+
+        @PostMapping("/list")
+        void triggerList() {
+            service.requireNonBlankItems(List.of("ok", ""));
+        }
+
+        // Built with a message only → getConstraintViolations() returns null
+        @PostMapping("/no-violations")
+        void triggerNoViolations() {
+            throw new ConstraintViolationException("no violations", null);
         }
     }
 }

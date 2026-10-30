@@ -169,6 +169,18 @@ class JsonExceptionHandlerIT {
                 .andExpect(jsonPath("$.traceId").isString());
     }
 
+    @Test
+    void malformedJson_largeLineNumber_isNotLocaleGrouped() throws Exception {
+        mvc.perform(post("/products")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("\n".repeat(1233) + "{ \"name\": }"))
+                .andDo(print())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("MALFORMED_JSON"))
+                .andExpect(jsonPath("$.line").value(1234))
+                .andExpect(jsonPath("$.detail").value("Malformed JSON at line 1234, column 11"));
+    }
+
     // --- negative: unknown field ---
 
     @Test
@@ -206,6 +218,20 @@ class JsonExceptionHandlerIT {
                 .andExpect(jsonPath("$.invalidValue").value("INVALID"))
                 .andExpect(jsonPath("$.validValues").isArray())
                 .andExpect(jsonPath("$.traceId").isString());
+    }
+
+    @Test
+    void invalidEnum_numericValue_isNotLocaleGroupedInDetail() throws Exception {
+        mvc.perform(post("/products")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Laptop","price":1.00,"stock":0,"category":12345}
+                                """))
+                .andDo(print())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_ENUM_VALUE"))
+                .andExpect(jsonPath("$.invalidValue").value("12345"))
+                .andExpect(jsonPath("$.detail").value(containsString("value '12345' as Category")));
     }
 
     // --- negative: invalid field value ---

@@ -3,6 +3,7 @@ package io.adzubla.blocks.error.handler;
 import io.adzubla.blocks.error.ErrorCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.MessageSource;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -27,7 +28,9 @@ import java.util.regex.Pattern;
  *   <li>{@link org.springframework.dao.DataIntegrityViolationException} with a unique-constraint message
  *       → 409 {@code DUPLICATE_VALUE}
  *   <li>{@link org.springframework.dao.DataIntegrityViolationException} with a foreign-key message
- *       → 409 {@code REFERENTIAL_INTEGRITY_VIOLATION}
+ *       → 409 {@code REFERENTIAL_INTEGRITY_VIOLATION} — with a distinct detail message when the
+ *       violation comes from updating or deleting a row that is still referenced, as opposed to
+ *       inserting or updating a row that references a missing one
  *   <li>{@link org.springframework.dao.DataIntegrityViolationException} (other)
  *       → 409 {@code DATA_INTEGRITY_VIOLATION}
  *   <li>{@link org.springframework.dao.EmptyResultDataAccessException} → 404 {@code RESOURCE_NOT_FOUND}
@@ -39,7 +42,8 @@ import java.util.regex.Pattern;
  * column name itself is deliberately not exposed (it may not match a client-facing field name at
  * all — different casing, a related entity, a generated key). The response body exposes only these
  * structured fields plus a stable {@code code} value; the raw driver message text itself is never
- * forwarded to the client.
+ * forwarded to the client. {@code invalidValue} can be turned off with
+ * {@code blocks.error.data.expose-invalid-value=false} (see {@link DataExceptionProperties}).
  *
  * <p>JPA's {@code EntityNotFoundException} is handled separately by
  * {@link JpaEntityNotFoundExceptionHandler}, which is only registered when JPA is on the classpath.
@@ -71,14 +75,17 @@ import java.util.regex.Pattern;
  */
 @RestControllerAdvice
 @Order(Ordered.HIGHEST_PRECEDENCE)
+@EnableConfigurationProperties(DataExceptionProperties.class)
 public class DataExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(DataExceptionHandler.class);
 
     private final ErrorMessages messages;
+    private final boolean exposeInvalidValue;
 
-    public DataExceptionHandler(MessageSource messageSource) {
+    public DataExceptionHandler(MessageSource messageSource, DataExceptionProperties properties) {
         this.messages = new ErrorMessages(messageSource);
+        this.exposeInvalidValue = properties.isExposeInvalidValue();
     }
 
     private String msg(String key) {
@@ -93,9 +100,19 @@ public class DataExceptionHandler {
     private static final Pattern FK_CONSTRAINT = Pattern.compile(
             "foreign key constraint \"([^\"]+)\"", Pattern.CASE_INSENSITIVE);
 
-    // PostgreSQL: Detail: Key (column)=(value) already exists. / Key (column)=(value) is not present in table "t".
+    // PostgreSQL: Detail: Key (column)=(value) already exists.
+    //             Detail: Key (column)=(value) is not present in table "t".
+    //             Detail: Key (column)=(value) is still referenced from table "t".
+    // Anchored on the trailing phrase so columns and values containing parentheses — expression
+    // indexes like lower(email), values like "Widget (large)" — are captured whole.
     private static final Pattern KEY_DETAIL = Pattern.compile(
-            "Key \\(([^)]+)\\)=\\(([^)]*)\\)", Pattern.CASE_INSENSITIVE);
+            "Key \\((.+?)\\)=\\((.*)\\) (?:already exists|is not present|is still referenced)",
+            Pattern.CASE_INSENSITIVE);
+
+    // PostgreSQL: ERROR: update or delete on table "t" violates foreign key constraint "c" on table "u"
+    //             Detail: Key (id)=(1) is still referenced from table "u".
+    private static final Pattern STILL_REFERENCED = Pattern.compile(
+            "update or delete on table|is still referenced", Pattern.CASE_INSENSITIVE);
 
     // Server-side only: the database column name, logged for troubleshooting but never returned
     // to the client (see class Javadoc).
@@ -117,11 +134,8 @@ public class DataExceptionHandler {
         var key = offendingKey(rootMessage);
         log.warn("{} {}: Duplicate key violation on constraint '{}', column '{}': {}",
                 status.value(), ErrorCode.DUPLICATE_VALUE, constraint, key.column(), rootMessage);
-        var problem = ProblemDetail.forStatusAndDetail(status, msg("error.duplicate-value.detail"));
-        problem.setTitle(msg("error.duplicate-value.title"));
-        problem.setProperty("code", ErrorCode.DUPLICATE_VALUE.name());
-        problem.setProperty("invalidValue", key.value());
-        return ResponseEntity.status(status).body(problem);
+        return keyViolation(status, ErrorCode.DUPLICATE_VALUE,
+                "error.duplicate-value.title", "error.duplicate-value.detail", key);
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
@@ -136,24 +150,23 @@ public class DataExceptionHandler {
             log.warn("{} {}: Unique constraint violation on '{}', column '{}': {}",
                     status.value(), ErrorCode.DUPLICATE_VALUE, uniqueMatcher.group(1),
                     key.column(), rootMessage);
-            var problem = ProblemDetail.forStatusAndDetail(status, msg("error.duplicate-value.detail"));
-            problem.setTitle(msg("error.duplicate-value.title"));
-            problem.setProperty("code", ErrorCode.DUPLICATE_VALUE.name());
-            problem.setProperty("invalidValue", key.value());
-            return ResponseEntity.status(status).body(problem);
+            return keyViolation(status, ErrorCode.DUPLICATE_VALUE,
+                    "error.duplicate-value.title", "error.duplicate-value.detail", key);
         }
 
         var fkMatcher = FK_CONSTRAINT.matcher(rootMessage);
         if (fkMatcher.find()) {
             var key = offendingKey(rootMessage);
-            log.warn("{} {}: Foreign key constraint violation on '{}', column '{}': {}",
+            var stillReferenced = STILL_REFERENCED.matcher(rootMessage).find();
+            log.warn("{} {}: Foreign key constraint violation on '{}' ({}), column '{}': {}",
                     status.value(), ErrorCode.REFERENTIAL_INTEGRITY_VIOLATION, fkMatcher.group(1),
+                    stillReferenced ? "row still referenced" : "referenced row missing",
                     key.column(), rootMessage);
-            var problem = ProblemDetail.forStatusAndDetail(status, msg("error.referential-integrity.detail"));
-            problem.setTitle(msg("error.referential-integrity.title"));
-            problem.setProperty("code", ErrorCode.REFERENTIAL_INTEGRITY_VIOLATION.name());
-            problem.setProperty("invalidValue", key.value());
-            return ResponseEntity.status(status).body(problem);
+            var detailKey = stillReferenced
+                    ? "error.referential-integrity.still-referenced.detail"
+                    : "error.referential-integrity.detail";
+            return keyViolation(status, ErrorCode.REFERENTIAL_INTEGRITY_VIOLATION,
+                    "error.referential-integrity.title", detailKey, key);
         }
 
         log.warn("{} {}: Unclassified data integrity violation ({}): {}",
@@ -163,6 +176,17 @@ public class DataExceptionHandler {
         var problem = ProblemDetail.forStatusAndDetail(status, msg("error.data-integrity.detail"));
         problem.setTitle(msg("error.data-integrity.title"));
         problem.setProperty("code", ErrorCode.DATA_INTEGRITY_VIOLATION.name());
+        return ResponseEntity.status(status).body(problem);
+    }
+
+    private ResponseEntity<ProblemDetail> keyViolation(HttpStatus status, ErrorCode code,
+                                                       String titleKey, String detailKey, OffendingKey key) {
+        var problem = ProblemDetail.forStatusAndDetail(status, msg(detailKey));
+        problem.setTitle(msg(titleKey));
+        problem.setProperty("code", code.name());
+        if (exposeInvalidValue) {
+            problem.setProperty("invalidValue", key.value());
+        }
         return ResponseEntity.status(status).body(problem);
     }
 

@@ -34,11 +34,27 @@ final class ErrorMessages {
 
     String get(String key, Object... args) {
         var locale = LocaleContextHolder.getLocale();
+        args = asPlainText(args);
         var message = applicationMessages.getMessage(key, args, null, locale);
         // Guard against an application MessageSource configured with useCodeAsDefaultMessage=true.
         if (message != null && !message.equals(key)) {
             return message;
         }
         return DEFAULTS.getMessage(key, args, locale);
+    }
+
+    // MessageFormat renders Number arguments with locale grouping (1234 -> "1,234" / "1.234"), which
+    // garbles line numbers and echoed input values; pass them through as plain text instead.
+    private static Object[] asPlainText(Object[] args) {
+        if (args == null) {
+            return null;
+        }
+        var result = args.clone();
+        for (int i = 0; i < result.length; i++) {
+            if (result[i] instanceof Number number) {
+                result[i] = number.toString();
+            }
+        }
+        return result;
     }
 }

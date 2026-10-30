@@ -120,7 +120,16 @@ only `spring-boot-starter-webmvc`.
 `ConstraintViolationException` (`@Validated` on non-controller beans, e.g. a service layer, or
 direct `Validator` calls) is handled separately by `ConstraintViolationExceptionHandler`, which is
 only registered when `spring-boot-starter-validation` is on the classpath
-(`@ConditionalOnClass(ConstraintViolationException.class)`).
+(`@ConditionalOnClass(ConstraintViolationException.class)`). Its `path` drops Java-only names: the
+method name is never included, and a parameter name is omitted when the violation is on a property
+of that parameter. So `create(@Valid Request request)` reports `$.name`, `find(@NotBlank String
+code)` reports `$.code`, and `tag(List<@NotBlank String> tags)` reports `$.tags[0]`.
+
+Each violation's `path` is a JSONPath-style location in the client's request input — the body, a
+path variable, or a query parameter — so every `VALIDATION_FAILED` response uses one notation no
+matter which layer validated it. For service-layer validation it is best-effort: the handler can't
+know how method parameters map back to the request, so it assumes the validated object is the
+request body.
 
 Both produce the same response shape:
 
@@ -159,6 +168,16 @@ For `DUPLICATE_VALUE` and `REFERENTIAL_INTEGRITY_VIOLATION`, the offending value
 (from PostgreSQL's `Detail: Key (column)=(value) ...` line) and exposed as `invalidValue`. The
 database column name itself is deliberately not exposed — it may not match a client-facing field
 name at all (different casing, a related entity, a generated key).
+
+`invalidValue` is the value *as stored by the database*, which is not necessarily what the client
+sent — e.g. for a unique index on a derived or server-generated column. If that is a concern, turn
+it off (see [Configuration](#data-exceptions--invalidvalue)).
+
+`REFERENTIAL_INTEGRITY_VIOLATION` covers both directions of a foreign-key violation, with a
+different `detail` for each: inserting/updating a row that references a missing one
+(*"The request references a resource that does not exist."*), and updating/deleting a row that
+other rows still reference (*"The resource is still referenced by other resources and cannot be
+removed or changed."*).
 
 | Exception                           | Condition              | `code`                            | Status |
 |-------------------------------------|------------------------|-----------------------------------|--------|
@@ -296,6 +315,14 @@ management.tracing.sampling.probability=1.0
 # Only add the X-Trace-Id response header to error responses (status 400+).
 # Defaults to false, meaning the header is added to every response.
 blocks.error.trace.header.error-only=true
+```
+
+### Data exceptions — `invalidValue`
+
+```properties
+# Omit invalidValue from DUPLICATE_VALUE / REFERENTIAL_INTEGRITY_VIOLATION responses.
+# Defaults to true (included).
+blocks.error.data.expose-invalid-value=false
 ```
 
 ### Logging

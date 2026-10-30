@@ -97,6 +97,43 @@ class DataExceptionHandlerIT {
     }
 
     @Test
+    void foreignKeyViolation_exposesMissingReferencedValue() throws Exception {
+        mvc.perform(post("/test/exceptions/fk-violation"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.invalidValue").value("-999"));
+    }
+
+    @Test
+    void foreignKeyViolationOnDelete_reportsStillReferenced() throws Exception {
+        mvc.perform(post("/test/exceptions/fk-still-referenced"))
+                .andDo(print())
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Referential integrity violation"))
+                .andExpect(jsonPath("$.detail").value(
+                        "The resource is still referenced by other resources and cannot be removed or changed."))
+                .andExpect(jsonPath("$.code").value("REFERENTIAL_INTEGRITY_VIOLATION"))
+                .andExpect(jsonPath("$.invalidValue").isString());
+    }
+
+    @Test
+    void duplicateKey_valueContainingParentheses_isExtractedWhole() throws Exception {
+        mvc.perform(post("/test/exceptions/duplicate-key-parentheses"))
+                .andDo(print())
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("DUPLICATE_VALUE"))
+                .andExpect(jsonPath("$.invalidValue").value("Widget (large)"));
+    }
+
+    @Test
+    void duplicateKey_onExpressionIndex_extractsValue() throws Exception {
+        mvc.perform(post("/test/exceptions/duplicate-key-expression-index"))
+                .andDo(print())
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("DUPLICATE_VALUE"))
+                .andExpect(jsonPath("$.invalidValue").value("a@x.com"));
+    }
+
+    @Test
     void dataIntegrityFallback_returnsConflict() throws Exception {
         mvc.perform(post("/test/exceptions/data-integrity"))
                 .andDo(print())
@@ -188,6 +225,35 @@ class DataExceptionHandlerIT {
         @Transactional
         void fkViolation() {
             jdbc.update("INSERT INTO product_tags (product_id, tag) VALUES (?, ?)", -999L, "tag");
+        }
+
+        // Deleting a product that product_tags still references → FK violation, "still referenced" variant
+        @PostMapping("/fk-still-referenced")
+        @Transactional
+        void fkStillReferenced() {
+            var id = jdbc.queryForObject(
+                    "INSERT INTO products (name) VALUES ('fk-parent') RETURNING id", Long.class);
+            jdbc.update("INSERT INTO product_tags (product_id, tag) VALUES (?, ?)", id, "tag");
+            jdbc.update("DELETE FROM products WHERE id = ?", id);
+        }
+
+        // Duplicate value containing parentheses → invalidValue must not be truncated at the first ')'
+        @PostMapping("/duplicate-key-parentheses")
+        @Transactional
+        void duplicateKeyParentheses() {
+            jdbc.update("INSERT INTO products (name) VALUES (?)", "Widget (large)");
+            jdbc.update("INSERT INTO products (name) VALUES (?)", "Widget (large)");
+        }
+
+        // Unique expression index → PostgreSQL reports "Key (lower(email))=(a@x.com) already exists."
+        // The DDL rolls back with the failed transaction.
+        @PostMapping("/duplicate-key-expression-index")
+        @Transactional
+        void duplicateKeyExpressionIndex() {
+            jdbc.execute("CREATE TABLE expression_index_test (email text)");
+            jdbc.execute("CREATE UNIQUE INDEX expression_index_test_uq ON expression_index_test (lower(email))");
+            jdbc.update("INSERT INTO expression_index_test VALUES (?)", "A@x.com");
+            jdbc.update("INSERT INTO expression_index_test VALUES (?)", "a@x.com");
         }
 
         // JdbcTemplate queryForObject miss → EmptyResultDataAccessException → handleEmptyResult
