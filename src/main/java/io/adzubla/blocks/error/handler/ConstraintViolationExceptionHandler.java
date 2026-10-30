@@ -66,13 +66,11 @@ public class ConstraintViolationExceptionHandler {
             return returnValueViolation(ex);
         }
         var violations = constraintViolations.stream()
-                .map(violation -> Map.of(
-                        "path", jsonPath(violation.getPropertyPath()),
-                        "invalidValue", violation.getInvalidValue() != null
-                                ? String.valueOf(violation.getInvalidValue()) : "null",
-                        "message", violation.getMessage() != null ? violation.getMessage() : ""
-                ))
-                .sorted(Comparator.comparing(v -> v.get("path")))
+                .map(violation -> Violations.of(jsonPath(violation.getPropertyPath()),
+                        violation.getInvalidValue(), violation.getMessage()))
+                // By message too, so several violations on one path come out in a stable order.
+                .sorted(Comparator.<Map<String, String>, String>comparing(v -> v.get("path"))
+                        .thenComparing(v -> v.get("message")))
                 .toList();
 
         log.debug("{} {}: Constraint violation with {} violation(s)",

@@ -16,6 +16,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.sql.SQLException;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
@@ -36,8 +37,12 @@ import java.util.regex.Pattern;
  *   <li>{@link org.springframework.dao.OptimisticLockingFailureException} → 409 {@code OPTIMISTIC_LOCKING_FAILURE}
  * </ul>
  * <p>
- * Constraint names, and — for duplicate-key and foreign-key violations — the offending value
- * ({@code invalidValue}), are extracted from the PostgreSQL error message via regex. The database
+ * Unique and foreign-key violations are recognised by the SQLState of the underlying
+ * {@link SQLException} ({@code 23505} / {@code 23503}), so classification doesn't depend on the
+ * language the database writes its messages in; the English PostgreSQL message text is a fallback
+ * for drivers that report no SQLState. Constraint names, and — for duplicate-key and foreign-key
+ * violations — the offending value ({@code invalidValue}), are extracted from the PostgreSQL error
+ * message via regex; when the value can't be extracted, {@code invalidValue} is omitted. The database
  * column name itself is deliberately not exposed (it may not match a client-facing field name at
  * all — different casing, a related entity, a generated key). The response body exposes only these
  * structured fields plus a stable {@code code} value; the raw driver message text itself is never
@@ -107,10 +112,20 @@ public class DataExceptionHandler {
             "Key \\((.+?)\\)=\\((.*)\\) (?:already exists|is not present|is still referenced)",
             Pattern.CASE_INSENSITIVE);
 
+    // Same, for messages in another language (lc_messages), e.g. "Chave (name)=(x) já existe.":
+    // the value runs to the last ')' on the line, as the translated trailing phrase has none.
+    private static final Pattern LOCALIZED_KEY_DETAIL = Pattern.compile("\\((.+?)\\)=\\((.*)\\)");
+
     // PostgreSQL: ERROR: update or delete on table "t" violates foreign key constraint "c" on table "u"
     //             Detail: Key (id)=(1) is still referenced from table "u".
     private static final Pattern STILL_REFERENCED = Pattern.compile(
             "update or delete on table|is still referenced", Pattern.CASE_INSENSITIVE);
+
+    private static final Pattern QUOTED_IDENTIFIER = Pattern.compile("\"[^\"]*\"");
+
+    // SQL:2003 / PostgreSQL SQLState codes.
+    private static final String UNIQUE_VIOLATION = "23505";
+    private static final String FOREIGN_KEY_VIOLATION = "23503";
 
     // Server-side only: the database column name, logged for troubleshooting but never returned
     // to the client (see class Javadoc).
@@ -120,7 +135,31 @@ public class DataExceptionHandler {
 
     private static OffendingKey offendingKey(String rootMessage) {
         var matcher = KEY_DETAIL.matcher(rootMessage);
+        if (matcher.find()) {
+            return new OffendingKey(matcher.group(1), matcher.group(2));
+        }
+        matcher = LOCALIZED_KEY_DETAIL.matcher(rootMessage);
         return matcher.find() ? new OffendingKey(matcher.group(1), matcher.group(2)) : OffendingKey.UNKNOWN;
+    }
+
+    private static String sqlState(Throwable ex) {
+        for (var t = ex; t != null; t = t.getCause()) {
+            if (t instanceof SQLException sql && sql.getSQLState() != null) {
+                return sql.getSQLState();
+            }
+        }
+        return null;
+    }
+
+    private static boolean isStillReferenced(String rootMessage) {
+        if (STILL_REFERENCED.matcher(rootMessage).find()) {
+            return true;
+        }
+        // Translated messages keep PostgreSQL's placeholders: the "still referenced" form names
+        // three identifiers on its first line (table, constraint, referencing table), the
+        // "referenced row missing" form two.
+        var firstLine = rootMessage.lines().findFirst().orElse("");
+        return QUOTED_IDENTIFIER.matcher(firstLine).results().count() >= 3;
     }
 
     @ExceptionHandler(DuplicateKeyException.class)
@@ -141,23 +180,26 @@ public class DataExceptionHandler {
             DataIntegrityViolationException ex) {
         var status = HttpStatus.CONFLICT;
         var rootMessage = Objects.requireNonNullElse(ex.getMostSpecificCause().getMessage(), "");
+        var sqlState = sqlState(ex);
 
         var uniqueMatcher = UNIQUE_CONSTRAINT.matcher(rootMessage);
-        if (uniqueMatcher.find()) {
+        var uniqueFound = uniqueMatcher.find();
+        if (uniqueFound || UNIQUE_VIOLATION.equals(sqlState)) {
             var key = offendingKey(rootMessage);
             log.warn("{} {}: Unique constraint violation on '{}', column '{}': {}",
-                    status.value(), ErrorCode.DUPLICATE_VALUE, uniqueMatcher.group(1),
+                    status.value(), ErrorCode.DUPLICATE_VALUE, uniqueFound ? uniqueMatcher.group(1) : "unknown",
                     key.column(), rootMessage);
             return keyViolation(status, ErrorCode.DUPLICATE_VALUE,
                     "error.duplicate-value.title", "error.duplicate-value.detail", key);
         }
 
         var fkMatcher = FK_CONSTRAINT.matcher(rootMessage);
-        if (fkMatcher.find()) {
+        var fkFound = fkMatcher.find();
+        if (fkFound || FOREIGN_KEY_VIOLATION.equals(sqlState)) {
             var key = offendingKey(rootMessage);
-            var stillReferenced = STILL_REFERENCED.matcher(rootMessage).find();
+            var stillReferenced = isStillReferenced(rootMessage);
             log.warn("{} {}: Foreign key constraint violation on '{}' ({}), column '{}': {}",
-                    status.value(), ErrorCode.REFERENTIAL_INTEGRITY_VIOLATION, fkMatcher.group(1),
+                    status.value(), ErrorCode.REFERENTIAL_INTEGRITY_VIOLATION, fkFound ? fkMatcher.group(1) : "unknown",
                     stillReferenced ? "row still referenced" : "referenced row missing",
                     key.column(), rootMessage);
             var detailKey = stillReferenced
@@ -182,7 +224,7 @@ public class DataExceptionHandler {
         var problem = ProblemDetail.forStatusAndDetail(status, msg(detailKey));
         problem.setTitle(msg(titleKey));
         problem.setProperty("code", code.name());
-        if (exposeInvalidValue) {
+        if (exposeInvalidValue && key.value() != null) {
             problem.setProperty("invalidValue", key.value());
         }
         return ResponseEntity.status(status).body(problem);

@@ -15,9 +15,11 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.exc.InputCoercionException;
 import tools.jackson.core.exc.StreamReadException;
+import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.exc.InvalidFormatException;
 import tools.jackson.databind.exc.MismatchedInputException;
 import tools.jackson.databind.exc.UnrecognizedPropertyException;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.Arrays;
 import java.util.List;
@@ -41,6 +43,10 @@ import java.util.Map;
  *   <li>Anything else → {@code MALFORMED_REQUEST_BODY}
  * </ul>
  *
+ * <p>The {@code validValues} of an enum are rendered the way the application's {@link ObjectMapper}
+ * serializes each constant, so {@code @JsonProperty}, {@code @JsonValue} and enum-related mapper
+ * features are honoured — they are the values the client is expected to send.
+ *
  * <p><b>Jackson 3 note:</b> uses the {@code tools.jackson.*} package namespace shipped with
  * Spring Boot 4, not the legacy {@code com.fasterxml.jackson.*} packages.
  */
@@ -51,6 +57,7 @@ public class JsonExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(JsonExceptionHandler.class);
 
     private final ErrorMessages messages;
+    private final ObjectMapper objectMapper;
 
     private static final Map<Class<?>, String> NUMERIC_RANGES = Map.of(
             byte.class,    "[" + Byte.MIN_VALUE    + ", " + Byte.MAX_VALUE    + "]",
@@ -63,8 +70,17 @@ public class JsonExceptionHandler {
             Long.class,    "[" + Long.MIN_VALUE    + ", " + Long.MAX_VALUE    + "]"
     );
 
-    public JsonExceptionHandler(MessageSource messageSource) {
+    public JsonExceptionHandler(MessageSource messageSource, ObjectMapper objectMapper) {
         this.messages = new ErrorMessages(messageSource);
+        this.objectMapper = objectMapper;
+    }
+
+    /**
+     * Uses a default {@link JsonMapper} to render enum values, ignoring the application's Jackson
+     * customizations; prefer {@link #JsonExceptionHandler(MessageSource, ObjectMapper)}.
+     */
+    public JsonExceptionHandler(MessageSource messageSource) {
+        this(messageSource, JsonMapper.shared());
     }
 
     private String msg(String key, Object... args) {
@@ -187,14 +203,13 @@ public class JsonExceptionHandler {
                 ErrorCode.UNKNOWN_JSON_FIELD);
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
     private JsonProblem invalidFormat(InvalidFormatException ex) {
         var path = jsonPath(ex.getPath());
         var targetType = ex.getTargetType();
 
         if (targetType != null && targetType.isEnum()) {
-            var validValues = Arrays.stream(((Class<? extends Enum>) targetType).getEnumConstants())
-                    .map(Enum::name)
+            var validValues = Arrays.stream(targetType.getEnumConstants())
+                    .map(this::jsonValue)
                     .toList();
             var detail = msg("error.invalid-enum.detail",
                     ex.getValue(), targetType.getSimpleName(), path, validValues);
@@ -217,6 +232,15 @@ public class JsonExceptionHandler {
         var typeName = targetType != null ? targetType.getSimpleName() : null;
         return new JsonProblem(msg("error.type-mismatch.title"), detail,
                 path, null, typeName, null, null, null, null, ErrorCode.TYPE_MISMATCH);
+    }
+
+    private String jsonValue(Object enumConstant) {
+        try {
+            var node = objectMapper.valueToTree(enumConstant);
+            return node.isString() ? node.asString() : node.toString();
+        } catch (JacksonException e) {
+            return ((Enum<?>) enumConstant).name();
+        }
     }
 
     private static String jsonPath(List<JacksonException.Reference> refs) {

@@ -28,7 +28,7 @@ import java.util.Map;
  *       {@code @Valid} on {@code @RequestBody} parameters; violations are collected from the
  *       {@link org.springframework.validation.BindingResult}.
  *   <li>{@link org.springframework.web.method.annotation.HandlerMethodValidationException} — raised
- *       by {@code @Validated} on individual method parameters or return values.
+ *       by Spring MVC's built-in method validation of controller parameters and return values.
  * </ul>
  *
  * <p>{@code jakarta.validation.ConstraintViolationException} — raised by {@code @Validated} on
@@ -38,10 +38,16 @@ import java.util.Map;
  *
  * <p>Every violation is mapped to a {@code violations} array entry with:
  * <ul>
- *   <li>{@code path} — JSONPath notation (e.g. {@code $.address.street})
- *   <li>{@code invalidValue} — serialised as string; {@code "null"} when the value is {@code null}
+ *   <li>{@code path} — JSONPath notation (e.g. {@code $.address.street}); {@code $} for a
+ *       constraint on the request object as a whole
+ *   <li>{@code invalidValue} — serialised as string; JSON {@code null} when the value is
+ *       {@code null}; absent for an object-level constraint, which has no single rejected value
  *   <li>{@code message} — the constraint violation message
  * </ul>
+ *
+ * <p>A violation on a controller's <em>return value</em> means the server produced invalid data,
+ * not that the client sent it, so it is answered like any unexpected error: HTTP 500
+ * {@code INTERNAL_SERVER_ERROR}, with the exception logged at {@code ERROR}.
  */
 @RestControllerAdvice
 @Order(Ordered.HIGHEST_PRECEDENCE)
@@ -59,20 +65,10 @@ public class ValidationExceptionHandler {
     public ResponseEntity<ProblemDetail> handleMethodArgumentNotValid(
             MethodArgumentNotValidException ex) {
         var violations = ex.getBindingResult().getAllErrors().stream()
-                .map(error -> {
-                    if (error instanceof FieldError fe) {
-                        return Map.of(
-                                "path", "$." + fe.getField(),
-                                "invalidValue", fe.getRejectedValue() != null
-                                        ? String.valueOf(fe.getRejectedValue()) : "null",
-                                "message", fe.getDefaultMessage() != null ? fe.getDefaultMessage() : ""
-                        );
-                    }
-                    return Map.of(
-                            "path", "$." + error.getObjectName(),
-                            "message", error.getDefaultMessage() != null ? error.getDefaultMessage() : ""
-                    );
-                })
+                .map(error -> error instanceof FieldError fe
+                        ? Violations.of("$." + fe.getField(), fe.getRejectedValue(), fe.getDefaultMessage())
+                        // An object-level constraint applies to the request body as a whole.
+                        : Violations.withoutValue("$", error.getDefaultMessage()))
                 .toList();
 
         log.debug("{} {}: Validation failed with {} violation(s)",
@@ -84,6 +80,9 @@ public class ValidationExceptionHandler {
     @ExceptionHandler(HandlerMethodValidationException.class)
     public ResponseEntity<ProblemDetail> handleHandlerMethodValidation(
             HandlerMethodValidationException ex) {
+        if (ex.isForReturnValue()) {
+            return returnValueViolation(ex);
+        }
         var violations = ex.getParameterValidationResults().stream()
                 .flatMap(result -> result.getResolvableErrors().stream()
                         .map(error -> {
@@ -91,11 +90,8 @@ public class ValidationExceptionHandler {
                             if (error instanceof FieldError fe) {
                                 field = fe.getField();
                             }
-                            return Map.of(
-                                    "path", "$." + (field != null ? field : "?"),
-                                    "message", error.getDefaultMessage() != null
-                                            ? error.getDefaultMessage() : ""
-                            );
+                            return Violations.withoutValue("$." + (field != null ? field : "?"),
+                                    error.getDefaultMessage());
                         }))
                 .toList();
 
@@ -103,6 +99,16 @@ public class ValidationExceptionHandler {
                 HttpStatus.UNPROCESSABLE_CONTENT.value(), ErrorCode.VALIDATION_FAILED, violations.size());
         log.trace("Stack trace:", ex);
         return unprocessable(violations);
+    }
+
+    private ResponseEntity<ProblemDetail> returnValueViolation(HandlerMethodValidationException ex) {
+        log.error("{} {}: Return value constraint violation",
+                HttpStatus.INTERNAL_SERVER_ERROR.value(), ErrorCode.INTERNAL_SERVER_ERROR, ex);
+        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,
+                messages.get("error.internal.detail"));
+        problem.setTitle(messages.get("error.internal.title"));
+        problem.setProperty("code", ErrorCode.INTERNAL_SERVER_ERROR.name());
+        return ResponseEntity.internalServerError().body(problem);
     }
 
     private ResponseEntity<ProblemDetail> unprocessable(List<Map<String, String>> violations) {

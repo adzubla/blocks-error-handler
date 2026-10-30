@@ -10,49 +10,49 @@
       "name": "blocks.error.json.enabled",
       "type": "java.lang.Boolean",
       "defaultValue": true,
-      "description": "Whether to register JsonExceptionHandler, which turns JSON deserialization failures into 400 responses.."
+      "description": "Whether to register JsonExceptionHandler, which turns JSON deserialization failures into 400 responses."
     },
     {
       "name": "blocks.error.validation.enabled",
       "type": "java.lang.Boolean",
       "defaultValue": true,
-      "description": "Whether to register ValidationExceptionHandler, which turns @Valid/@Validated controller failures into 422 responses.."
+      "description": "Whether to register ValidationExceptionHandler, which turns @Valid/@Validated controller failures into 422 responses."
     },
     {
       "name": "blocks.error.constraint-violation.enabled",
       "type": "java.lang.Boolean",
       "defaultValue": true,
-      "description": "Whether to register ConstraintViolationExceptionHandler, which turns Bean Validation ConstraintViolationException into 422 responses.."
+      "description": "Whether to register ConstraintViolationExceptionHandler, which turns Bean Validation ConstraintViolationException into 422 responses."
     },
     {
       "name": "blocks.error.data.enabled",
       "type": "java.lang.Boolean",
       "defaultValue": true,
-      "description": "Whether to register DataExceptionHandler, which turns data access exceptions into 404/409 responses.."
+      "description": "Whether to register DataExceptionHandler, which turns data access exceptions into 404/409 responses."
     },
     {
       "name": "blocks.error.jpa.enabled",
       "type": "java.lang.Boolean",
       "defaultValue": true,
-      "description": "Whether to register JpaEntityNotFoundExceptionHandler, which turns JPA EntityNotFoundException into 404 responses.."
+      "description": "Whether to register JpaEntityNotFoundExceptionHandler, which turns JPA EntityNotFoundException into 404 responses."
     },
     {
       "name": "blocks.error.global.enabled",
       "type": "java.lang.Boolean",
       "defaultValue": true,
-      "description": "Whether to register GlobalExceptionHandler, which handles Spring MVC infrastructure exceptions and the 500 catch-all.."
+      "description": "Whether to register GlobalExceptionHandler, which handles Spring MVC infrastructure exceptions and the 500 catch-all."
     },
     {
       "name": "blocks.error.trace.body.enabled",
       "type": "java.lang.Boolean",
       "defaultValue": true,
-      "description": "Whether to register ProblemDetailTraceAdvice, which adds the 'traceId' property to error response bodies.."
+      "description": "Whether to register ProblemDetailTraceAdvice, which adds the 'traceId' property to error response bodies."
     },
     {
       "name": "blocks.error.trace.header.enabled",
       "type": "java.lang.Boolean",
       "defaultValue": true,
-      "description": "Whether to register TraceIdResponseHeaderFilter, which adds the X-Trace-Id response header.."
+      "description": "Whether to register TraceIdResponseHeaderFilter, which adds the X-Trace-Id response header."
     }
   ]
 }

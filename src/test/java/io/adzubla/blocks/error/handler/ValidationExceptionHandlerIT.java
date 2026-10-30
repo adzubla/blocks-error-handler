@@ -3,7 +3,11 @@ package io.adzubla.blocks.error.handler;
 import com.example.demo.DemoApplication;
 import com.example.demo.TestcontainersConfiguration;
 import com.example.demo.product.ProductRepository;
+import jakarta.validation.Constraint;
+import jakarta.validation.ConstraintValidator;
+import jakarta.validation.ConstraintValidatorContext;
 import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.Payload;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -20,9 +24,14 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 import java.util.List;
 
 import static org.hamcrest.Matchers.containsString;
@@ -240,7 +249,7 @@ class ValidationExceptionHandlerIT {
     }
 
     @Test
-    void nullRejectedValue_serializedAsLiteralNullString() throws Exception {
+    void nullRejectedValue_serializedAsJsonNull() throws Exception {
         mvc.perform(post("/products")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -251,7 +260,7 @@ class ValidationExceptionHandlerIT {
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.violations[?(@.path=='$.price')].invalidValue",
-                        hasItem("null")))
+                        hasItem(Matchers.nullValue())))
                 .andExpect(jsonPath("$.traceId").isString());
     }
 
@@ -267,6 +276,29 @@ class ValidationExceptionHandlerIT {
                 .andExpect(jsonPath("$.violations").isArray())
                 .andExpect(jsonPath("$.violations[?(@.path=='$.id')]").exists())
                 .andExpect(jsonPath("$.traceId").isString());
+    }
+
+    @Test
+    void classLevelConstraint_reportsRootPathWithoutInvalidValue() throws Exception {
+        mvc.perform(post("/test/constraint-violation/range")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"min\":5,\"max\":1}"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.violations.length()").value(1))
+                .andExpect(jsonPath("$.violations[0].path").value("$"))
+                .andExpect(jsonPath("$.violations[0].message").value("min must not exceed max"))
+                .andExpect(jsonPath("$.violations[0].invalidValue").doesNotExist());
+    }
+
+    @Test
+    void controllerReturnValueViolation_returnsInternalServerError() throws Exception {
+        mvc.perform(post("/test/constraint-violation/controller-return-value"))
+                .andDo(print())
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"))
+                .andExpect(jsonPath("$.violations").doesNotExist());
     }
 
     // --- ConstraintViolationException (@Validated on a non-controller bean) ---
@@ -713,6 +745,28 @@ class ValidationExceptionHandlerIT {
     record Named(@NotBlank String name) {
     }
 
+    @Target(ElementType.TYPE)
+    @Retention(RetentionPolicy.RUNTIME)
+    @Constraint(validatedBy = OrderedRangeValidator.class)
+    @interface OrderedRange {
+        String message() default "min must not exceed max";
+
+        Class<?>[] groups() default {};
+
+        Class<? extends Payload>[] payload() default {};
+    }
+
+    public static class OrderedRangeValidator implements ConstraintValidator<OrderedRange, Range> {
+        @Override
+        public boolean isValid(Range range, ConstraintValidatorContext context) {
+            return range.min() <= range.max();
+        }
+    }
+
+    @OrderedRange
+    record Range(int min, int max) {
+    }
+
     @RestController
     @RequestMapping("/test/constraint-violation")
     static class ConstraintViolationTriggerController {
@@ -738,6 +792,17 @@ class ValidationExceptionHandlerIT {
         @PostMapping("/return-value")
         void triggerReturnValue() {
             service.brokenLookup();
+        }
+
+        @PostMapping("/range")
+        void range(@RequestBody @Valid Range range) {
+        }
+
+        // Spring MVC's built-in method validation of the return value → HandlerMethodValidationException
+        @PostMapping("/controller-return-value")
+        @NotNull
+        String brokenControllerLookup() {
+            return null;
         }
 
         @PostMapping("/list")

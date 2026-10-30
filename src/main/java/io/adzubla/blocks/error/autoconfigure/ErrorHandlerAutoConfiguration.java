@@ -7,6 +7,7 @@ import io.adzubla.blocks.error.handler.GlobalExceptionHandler;
 import io.adzubla.blocks.error.handler.JpaEntityNotFoundExceptionHandler;
 import io.adzubla.blocks.error.handler.JsonExceptionHandler;
 import io.adzubla.blocks.error.handler.ValidationExceptionHandler;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -16,6 +17,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.MessageSource;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Registers the exception handlers that turn exceptions into RFC 9457 ProblemDetail responses.
@@ -37,14 +39,14 @@ import org.springframework.context.annotation.Configuration;
 @AutoConfiguration(beforeName = "org.springframework.boot.webmvc.autoconfigure.WebMvcAutoConfiguration")
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnBooleanProperty(name = "blocks.error.enabled", matchIfMissing = true)
-@EnableConfigurationProperties(DataExceptionProperties.class)
 public class ErrorHandlerAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnBooleanProperty(name = "blocks.error.json.enabled", matchIfMissing = true)
-    JsonExceptionHandler jsonExceptionHandler(MessageSource messageSource) {
-        return new JsonExceptionHandler(messageSource);
+    JsonExceptionHandler jsonExceptionHandler(MessageSource messageSource,
+                                              ObjectProvider<JsonMapper> jsonMapper) {
+        return new JsonExceptionHandler(messageSource, jsonMapper.getIfUnique(JsonMapper::shared));
     }
 
     @Bean
@@ -56,13 +58,6 @@ public class ErrorHandlerAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnBooleanProperty(name = "blocks.error.data.enabled", matchIfMissing = true)
-    DataExceptionHandler dataExceptionHandler(MessageSource messageSource, DataExceptionProperties properties) {
-        return new DataExceptionHandler(messageSource, properties);
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
     @ConditionalOnBooleanProperty(name = "blocks.error.global.enabled", matchIfMissing = true)
     GlobalExceptionHandler globalExceptionHandler(MessageSource messageSource) {
         return new GlobalExceptionHandler(messageSource);
@@ -70,6 +65,21 @@ public class ErrorHandlerAutoConfiguration {
 
     // Separate configuration classes, so the bean methods (whose signatures name optional types) are
     // only introspected when the optional dependency is on the classpath.
+
+    // spring-tx (org.springframework.dao) comes with spring-jdbc / JPA / Spring Data, not with
+    // spring-webmvc: an application without data access has no DataAccessException to handle.
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = "org.springframework.dao.DataAccessException")
+    @EnableConfigurationProperties(DataExceptionProperties.class)
+    static class DataAccessConfiguration {
+
+        @Bean
+        @ConditionalOnMissingBean
+        @ConditionalOnBooleanProperty(name = "blocks.error.data.enabled", matchIfMissing = true)
+        DataExceptionHandler dataExceptionHandler(MessageSource messageSource, DataExceptionProperties properties) {
+            return new DataExceptionHandler(messageSource, properties);
+        }
+    }
 
     @Configuration(proxyBeanMethods = false)
     @ConditionalOnClass(name = "jakarta.validation.ConstraintViolationException")

@@ -8,9 +8,15 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -19,7 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(classes = DemoApplication.class)
 @AutoConfigureMockMvc
-@Import(TestcontainersConfiguration.class)
+@Import({TestcontainersConfiguration.class, JsonExceptionHandlerIT.JsonTestConfig.class})
 class JsonExceptionHandlerIT {
 
     @Autowired
@@ -516,5 +522,41 @@ class JsonExceptionHandlerIT {
                 .andExpect(jsonPath("$.code").value("UNKNOWN_JSON_FIELD"))
                 .andExpect(jsonPath("$.title").value("Campo JSON desconhecido"))
                 .andExpect(jsonPath("$.path").value("$.unknownField"));
+    }
+
+    @Test
+    void invalidEnum_listsJsonNamesNotJavaNames() throws Exception {
+        mvc.perform(post("/test/json/stock")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"IN_STOCK\"}"))
+                .andDo(print())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_ENUM_VALUE"))
+                .andExpect(jsonPath("$.validValues[0]").value("in_stock"))
+                .andExpect(jsonPath("$.validValues[1]").value("sold_out"))
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("[in_stock, sold_out]")));
+    }
+
+    enum StockStatus {
+        @JsonProperty("in_stock") IN_STOCK,
+        @JsonProperty("sold_out") SOLD_OUT
+    }
+
+    record StockRequest(StockStatus status) {
+    }
+
+    @TestConfiguration
+    static class JsonTestConfig {
+        @Bean
+        StockController stockController() {
+            return new StockController();
+        }
+    }
+
+    @RestController
+    static class StockController {
+        @PostMapping("/test/json/stock")
+        void stock(@RequestBody StockRequest request) {
+        }
     }
 }

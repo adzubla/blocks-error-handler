@@ -11,15 +11,16 @@ import org.springframework.core.Ordered;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.*;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.http.converter.HttpMessageNotWritableException;
 import org.springframework.util.ClassUtils;
 import org.springframework.util.StringUtils;
-import org.springframework.validation.BindException;
 import org.springframework.validation.method.MethodValidationException;
 import org.springframework.web.ErrorResponseException;
 import org.springframework.web.HttpMediaTypeNotAcceptableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingPathVariableException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.ServletRequestBindingException;
@@ -47,6 +48,10 @@ import java.util.stream.Stream;
  * exceptions (method-not-allowed, unsupported media type, missing parameters, etc.), enriching
  * every {@link org.springframework.http.ProblemDetail} body produced by
  * {@link #handleExceptionInternal} with a stable {@link ErrorCode} string.
+ *
+ * <p>Validation failures that reach this handler — only when {@link ValidationExceptionHandler} is
+ * disabled or replaced — are answered with 422, matching their {@code VALIDATION_FAILED} code,
+ * instead of Spring's default 400.
  *
  * <p>A final {@code @ExceptionHandler(Exception.class)} catch-all returns 500
  * {@code INTERNAL_SERVER_ERROR} and logs the stack trace at {@code ERROR} level, with two
@@ -82,6 +87,24 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     public GlobalExceptionHandler(MessageSource messageSource) {
         this.messageSource = messageSource;
         this.messages = new ErrorMessages(messageSource);
+    }
+
+    @Override
+    protected ResponseEntity<Object> handleMethodArgumentNotValid(
+            MethodArgumentNotValidException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        ex.getBody().setStatus(HttpStatus.UNPROCESSABLE_CONTENT);
+        return super.handleMethodArgumentNotValid(ex, headers, HttpStatus.UNPROCESSABLE_CONTENT, request);
+    }
+
+    @Override
+    protected ResponseEntity<Object> handleHandlerMethodValidationException(
+            HandlerMethodValidationException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        // A return-value violation keeps Spring's 500: it is a server error, not a client one.
+        if (!ex.isForReturnValue()) {
+            ex.getBody().setStatus(HttpStatus.UNPROCESSABLE_CONTENT);
+            status = HttpStatus.UNPROCESSABLE_CONTENT;
+        }
+        return super.handleHandlerMethodValidationException(ex, headers, status, request);
     }
 
     @Override
@@ -186,19 +209,23 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         if (ex instanceof TypeMismatchException) {
             return ErrorCode.PARAMETER_TYPE_MISMATCH.name();
         }
+        if (ex instanceof HttpMessageNotReadableException) {
+            return ErrorCode.MALFORMED_REQUEST_BODY.name();
+        }
         if (ex instanceof HttpMessageNotWritableException) {
             return ErrorCode.MESSAGE_NOT_WRITABLE.name();
         }
-        // Normally claimed first by ValidationExceptionHandler; reached only when an application
-        // disables or replaces it (blocks.error.validation.enabled=false).
-        if (ex instanceof HandlerMethodValidationException) {
+        // The next two are normally claimed first by ValidationExceptionHandler; reached only when
+        // an application disables or replaces it (blocks.error.validation.enabled=false).
+        if (ex instanceof HandlerMethodValidationException hmve) {
+            return hmve.isForReturnValue()
+                    ? ErrorCode.INTERNAL_SERVER_ERROR.name() : ErrorCode.VALIDATION_FAILED.name();
+        }
+        if (ex instanceof MethodArgumentNotValidException) {
             return ErrorCode.VALIDATION_FAILED.name();
         }
         if (ex instanceof MethodValidationException) {
             return ErrorCode.METHOD_VALIDATION_ERROR.name();
-        }
-        if (ex instanceof BindException) {
-            return ErrorCode.VALIDATION_FAILED.name();
         }
         if (ex instanceof ErrorResponseException) {
             return ErrorCode.ERROR_RESPONSE.name();

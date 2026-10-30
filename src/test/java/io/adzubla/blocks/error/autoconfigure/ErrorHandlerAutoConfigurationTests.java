@@ -92,15 +92,19 @@ class ErrorHandlerAutoConfigurationTests {
     @Test
     void optionalHandlersBackOffWithoutTheirDependency() {
         runner.withClassLoader(new FilteredClassLoader(
-                        "jakarta.validation.", "jakarta.persistence.", "io.micrometer.tracing."))
+                        "jakarta.validation.", "jakarta.persistence.", "io.micrometer.tracing.",
+                        "org.springframework.dao."))
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).doesNotHaveBean(ConstraintViolationExceptionHandler.class);
+                    assertThat(context).doesNotHaveBean(DataExceptionHandler.class);
+                    assertThat(context).doesNotHaveBean(DataExceptionProperties.class);
                     assertThat(context).doesNotHaveBean(JpaEntityNotFoundExceptionHandler.class);
                     assertThat(context).doesNotHaveBean(ProblemDetailTraceAdvice.class);
                     assertThat(context).doesNotHaveBean(TraceIdResponseHeaderFilter.class);
                     assertThat(context).hasSingleBean(GlobalExceptionHandler.class);
-                    assertThat(context).hasSingleBean(DataExceptionHandler.class);
+                    assertThat(context).hasSingleBean(JsonExceptionHandler.class);
+                    assertThat(context).hasSingleBean(ValidationExceptionHandler.class);
                 });
     }
 
