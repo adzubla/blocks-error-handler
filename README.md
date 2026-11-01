@@ -172,9 +172,9 @@ A return-value violation means the server produced invalid data, so it is logged
 Each violation has:
 
 - **`path`**: the JSONPath-style location in the request (see the table below).
-- **`invalidValue`**: the rejected value as a string, or JSON `null` if the value was `null`. It is
-  absent when there is no single rejected value (a class-level or cross-parameter constraint), so the
-  contents of the object are not returned.
+- **`invalidValue`**: the rejected value as a string, or JSON `null` if the value was `null`. Only simple
+  values are returned, such as strings, numbers, booleans, dates and enums. It is absent for a collection,
+  array or object, including a class-level or cross-parameter constraint, so their contents are not returned.
 - **`message`**: the constraint message (see
   [Validation constraint messages](#83-validation-constraint-messages)).
 
@@ -685,7 +685,7 @@ Each `violations` entry has:
 | Field          | Type           | Presence | Description                                                                                      |
 |----------------|----------------|----------|--------------------------------------------------------------------------------------------------|
 | `path`         | string         | Always   | Location in the request: a body field, or a query or path parameter. `$` means the whole request |
-| `invalidValue` | string or null | Optional | The rejected value, `null` if the value was null, and absent if no single value was at fault     |
+| `invalidValue` | string or null | Optional | The rejected value, `null` if the value was null, and absent for a list or object                |
 | `message`      | string         | Always   | Why the value was rejected. May be translated                                                    |
 
 ```json

@@ -45,9 +45,9 @@ import java.util.Map;
  * <ul>
  *   <li>{@code path} — JSONPath notation (e.g. {@code $.address.street}); {@code $} for a
  *       constraint on the request object as a whole
- *   <li>{@code invalidValue} — serialised as string; JSON {@code null} when the value is
- *       {@code null}; absent for an object-level or cross-parameter constraint, which has no single
- *       rejected value
+ *   <li>{@code invalidValue} — a simple value serialised as string; JSON {@code null} when the
+ *       value is {@code null}; absent for a complex value such as a collection or an object, and for
+ *       an object-level or cross-parameter constraint
  *   <li>{@code message} — the constraint violation message
  * </ul>
  *

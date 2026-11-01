@@ -40,8 +40,8 @@ import java.util.Set;
  * {@link ValidationExceptionHandler} reports request bodies). So
  * {@code void create(@Valid Request request)} reports {@code $.name}, while
  * {@code void find(@NotBlank String code)} reports {@code $.code} and
- * {@code void tag(List<@NotBlank String> tags)} reports {@code $.tags[0]}. A class-level or
- * cross-parameter constraint has no {@code invalidValue}, so the object is never echoed.
+ * {@code void tag(List<@NotBlank String> tags)} reports {@code $.tags[0]}. {@code invalidValue}
+ * follows the convention in {@link Violations}, so a complex value is never echoed.
  *
  * <p>A violation on a method's <em>return value</em> means the server produced invalid data, not
  * that the client sent it, so it is answered like any unexpected error: HTTP 500
@@ -68,7 +68,8 @@ public class ConstraintViolationExceptionHandler {
             return returnValueViolation(ex);
         }
         var violations = constraintViolations.stream()
-                .map(ConstraintViolationExceptionHandler::toViolation)
+                .map(violation -> Violations.of(jsonPath(violation.getPropertyPath()),
+                        violation.getInvalidValue(), violation.getMessage()))
                 // By message too, so several violations on one path come out in a stable order.
                 .sorted(Comparator.<Map<String, String>, String>comparing(v -> v.get("path"))
                         .thenComparing(v -> v.get("message")))
@@ -83,13 +84,6 @@ public class ConstraintViolationExceptionHandler {
         problem.setProperty("code", ErrorCode.VALIDATION_FAILED.name());
         problem.setProperty("violations", violations);
         return ResponseEntity.unprocessableContent().body(problem);
-    }
-
-    private static Map<String, String> toViolation(ConstraintViolation<?> violation) {
-        var path = jsonPath(violation.getPropertyPath());
-        return Violations.BeanValidation.isObjectLevel(violation)
-                ? Violations.withoutValue(path, violation.getMessage())
-                : Violations.of(path, violation.getInvalidValue(), violation.getMessage());
     }
 
     private ResponseEntity<ProblemDetail> returnValueViolation(ConstraintViolationException ex) {

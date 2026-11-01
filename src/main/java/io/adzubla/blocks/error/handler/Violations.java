@@ -1,9 +1,7 @@
 package io.adzubla.blocks.error.handler;
 
-import jakarta.validation.ConstraintViolation;
-import jakarta.validation.ElementKind;
+import org.springframework.beans.BeanUtils;
 import org.springframework.context.MessageSourceResolvable;
-import org.springframework.util.ClassUtils;
 import org.springframework.validation.FieldError;
 import org.springframework.validation.ObjectError;
 import org.springframework.validation.method.MethodValidationResult;
@@ -18,35 +16,31 @@ import java.util.Map;
 /**
  * Builds the entries of the {@code violations} array shared by the validation handlers.
  *
- * <p>{@code invalidValue} follows one convention across the library: present with the value as a
- * string when known, JSON {@code null} when the rejected value was {@code null}, and absent when
- * there is no single rejected value. An object-level or cross-parameter constraint has none, and
- * its "value" must not be echoed: it would be the {@code toString()} of the whole object, fields
- * the client never sent or shouldn't see included.
+ * <p>{@code invalidValue} follows one convention across the library: the value as a string when it
+ * is a simple value (a string, number, boolean, date, enum and the like, see
+ * {@link BeanUtils#isSimpleValueType}), JSON {@code null} when the rejected value was {@code null},
+ * and absent otherwise. A complex value must not be echoed: its {@code toString()} could include
+ * fields the client never sent or shouldn't see. That covers collections, arrays and objects,
+ * including those rejected by an object-level or cross-parameter constraint.
  */
 final class Violations {
-
-    private static final boolean BEAN_VALIDATION_PRESENT =
-            ClassUtils.isPresent("jakarta.validation.ConstraintViolation", Violations.class.getClassLoader());
 
     private Violations() {
     }
 
     /**
-     * Entry for a binding error below {@code root}. A field-level error on a nested object's
-     * class-level constraint keeps the field's path but not its value.
+     * Entry for a binding error below {@code root}.
      */
     static Map<String, String> of(String root, ObjectError error) {
-        if (error instanceof FieldError fe) {
-            var path = root + "." + fe.getField();
-            return BEAN_VALIDATION_PRESENT && BeanValidation.isObjectLevel(fe)
-                    ? withoutValue(path, fe.getDefaultMessage())
-                    : of(path, fe.getRejectedValue(), fe.getDefaultMessage());
-        }
-        return withoutValue(root, error.getDefaultMessage());
+        return error instanceof FieldError fe
+                ? of(root + "." + fe.getField(), fe.getRejectedValue(), fe.getDefaultMessage())
+                : withoutValue(root, error.getDefaultMessage());
     }
 
     static Map<String, String> of(String path, Object invalidValue, String message) {
+        if (invalidValue != null && !BeanUtils.isSimpleValueType(invalidValue.getClass())) {
+            return withoutValue(path, message);
+        }
         var violation = new LinkedHashMap<String, String>();
         violation.put("path", path);
         violation.put("invalidValue", invalidValue != null ? String.valueOf(invalidValue) : null);
@@ -98,29 +92,5 @@ final class Violations {
             return "[" + parameter.getContainerKey() + "]";
         }
         return "";
-    }
-
-    /**
-     * Touches Bean Validation types, which are optional: {@link ValidationExceptionHandler} is also
-     * registered without them. Being a separate class, it is only loaded when they are present.
-     */
-    static final class BeanValidation {
-
-        private BeanValidation() {
-        }
-
-        static boolean isObjectLevel(ObjectError error) {
-            return error.contains(ConstraintViolation.class)
-                    && isObjectLevel(error.unwrap(ConstraintViolation.class));
-        }
-
-        /** Whether the constraint is on a whole object or on a method's parameters as a set. */
-        static boolean isObjectLevel(ConstraintViolation<?> violation) {
-            ElementKind last = null;
-            for (var node : violation.getPropertyPath()) {
-                last = node.getKind();
-            }
-            return last == ElementKind.BEAN || last == ElementKind.CROSS_PARAMETER;
-        }
     }
 }

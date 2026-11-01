@@ -13,6 +13,7 @@ import jakarta.validation.Validator;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import jakarta.validation.constraintvalidation.SupportedValidationTarget;
 import jakarta.validation.constraintvalidation.ValidationTarget;
 import org.hamcrest.Matchers;
@@ -429,6 +430,65 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.violations[0].path").value("$"))
                 .andExpect(jsonPath("$.violations[0].invalidValue").doesNotHaveJsonPath());
+    }
+
+    // --- field-level constraints on complex values never echo the value ---
+
+    @Test
+    void constraintOnComplexBodyField_omitsInvalidValue() throws Exception {
+        mvc.perform(post("/test/constraint-violation/basket")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[{\"secret\":\"hunter2\"},{\"secret\":\"hunter3\"}]}"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(content().string(Matchers.not(containsString("hunter"))))
+                .andExpect(jsonPath("$.violations.length()").value(1))
+                .andExpect(jsonPath("$.violations[0].path").value("$.items"))
+                .andExpect(jsonPath("$.violations[0].invalidValue").doesNotHaveJsonPath());
+    }
+
+    @Test
+    void constraintOnComplexFieldWithMethodValidation_omitsInvalidValue() throws Exception {
+        mvc.perform(post("/test/constraint-violation/basket-mixed").param("page", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[{\"secret\":\"hunter2\"},{\"secret\":\"hunter3\"}]}"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(content().string(Matchers.not(containsString("hunter"))))
+                .andExpect(jsonPath("$.violations[0].path").value("$.items"))
+                .andExpect(jsonPath("$.violations[0].invalidValue").doesNotHaveJsonPath());
+    }
+
+    @Test
+    void constraintOnCollectionControllerParameter_omitsInvalidValue() throws Exception {
+        mvc.perform(get("/test/constraint-violation/few-tags").param("tags", "hunter2", "hunter3"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(content().string(Matchers.not(containsString("hunter"))))
+                .andExpect(jsonPath("$.violations[0].path").value("$.tags"))
+                .andExpect(jsonPath("$.violations[0].invalidValue").doesNotHaveJsonPath());
+    }
+
+    @Test
+    void constraintOnComplexServiceField_omitsInvalidValue() throws Exception {
+        mvc.perform(post("/test/constraint-violation/service-basket"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(content().string(Matchers.not(containsString("hunter"))))
+                .andExpect(jsonPath("$.violations[0].path").value("$.items"))
+                .andExpect(jsonPath("$.violations[0].invalidValue").doesNotHaveJsonPath());
+    }
+
+    @Test
+    void nullComplexField_stillReportsJsonNull() throws Exception {
+        mvc.perform(post("/test/constraint-violation/basket")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":null}"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.violations[0].path").value("$.items"))
+                .andExpect(jsonPath("$.violations[0].invalidValue").hasJsonPath())
+                .andExpect(jsonPath("$.violations[0].invalidValue").value(Matchers.nullValue()));
     }
 
     @Test
@@ -887,6 +947,9 @@ class ValidationExceptionHandlerIT {
         void requireValidRange(@Valid Range range) {
         }
 
+        void requireValidBasket(@Valid Basket basket) {
+        }
+
         void requireBundleMessage(@NotBlank(message = "{test.widget-not-found}") String value) {
         }
 
@@ -910,6 +973,12 @@ class ValidationExceptionHandlerIT {
     }
 
     record Box(@Valid Range range) {
+    }
+
+    record Item(String secret) {
+    }
+
+    record Basket(@NotNull @Size(max = 1) List<Item> items) {
     }
 
     @Target(ElementType.METHOD)
@@ -976,6 +1045,24 @@ class ValidationExceptionHandlerIT {
         @ArgumentsInOrder
         @PostMapping("/cross-mixed")
         void crossMixed(@RequestParam int min, @RequestParam int max, @RequestParam @Min(1) int page) {
+        }
+
+        @PostMapping("/basket")
+        void basket(@RequestBody @Valid Basket basket) {
+        }
+
+        // A constraint on another parameter turns @Valid on the body into method validation.
+        @PostMapping("/basket-mixed")
+        void basketMixed(@RequestBody @Valid Basket basket, @RequestParam @Min(1) int page) {
+        }
+
+        @GetMapping("/few-tags")
+        void fewTags(@RequestParam @Size(max = 1) List<String> tags) {
+        }
+
+        @PostMapping("/service-basket")
+        void serviceBasket() {
+            service.requireValidBasket(new Basket(List.of(new Item("hunter2"), new Item("hunter3"))));
         }
 
         @PostMapping("/bundle-message")
