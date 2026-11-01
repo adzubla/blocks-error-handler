@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -131,6 +132,25 @@ class GlobalExceptionHandlerIT {
                 .hasCauseInstanceOf(BadCredentialsException.class);
     }
 
+    @Test
+    void nonMultipartRequestToMultipartEndpoint_returnsBadRequest() throws Exception {
+        mvc.perform(post("/test/global/upload").contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andDo(print())
+                .andExpect(status().isBadRequest())
+                .andExpect(header().exists("X-Trace-Id"))
+                .andExpect(jsonPath("$.code").value("MALFORMED_MULTIPART_REQUEST"))
+                .andExpect(jsonPath("$.title").value("Malformed multipart request"))
+                .andExpect(jsonPath("$.traceId").isString());
+    }
+
+    @Test
+    void multipartError_withPtBrLocale_returnsPortugueseMessages() throws Exception {
+        mvc.perform(post("/test/global/upload").contentType(MediaType.APPLICATION_JSON).content("{}")
+                        .header("Accept-Language", "pt-BR"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Requisição multipart malformada"));
+    }
+
     @TestConfiguration
     static class GlobalTestConfig {
         @Bean
@@ -145,6 +165,10 @@ class GlobalExceptionHandlerIT {
 
         @PostMapping("/need-param")
         void needParam(@RequestParam String name) {
+        }
+
+        @PostMapping("/upload")
+        void upload(@RequestParam MultipartFile file) {
         }
 
         @PostMapping("/fail")

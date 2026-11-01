@@ -31,6 +31,7 @@ import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
@@ -122,6 +123,22 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             pd.setProperty("code", code);
         }
         return result;
+    }
+
+    /**
+     * A multipart request that can't be parsed, or a request that isn't multipart sent to an endpoint
+     * expecting one, is the client's fault. {@link MaxUploadSizeExceededException} (a subclass) keeps
+     * Spring's own 413 mapping.
+     */
+    @ExceptionHandler(MultipartException.class)
+    public ResponseEntity<ProblemDetail> handleMultipart(MultipartException ex) {
+        log.warn("{} {}: {}", HttpStatus.BAD_REQUEST.value(), ErrorCode.MALFORMED_MULTIPART_REQUEST, ex.getMessage());
+        log.trace("Stack trace:", ex);
+        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
+                messages.get("error.malformed-multipart.detail"));
+        problem.setTitle(messages.get("error.malformed-multipart.title"));
+        problem.setProperty("code", ErrorCode.MALFORMED_MULTIPART_REQUEST.name());
+        return ResponseEntity.badRequest().body(problem);
     }
 
     @ExceptionHandler(Exception.class)

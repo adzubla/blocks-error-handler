@@ -335,14 +335,18 @@ Two kinds of exception are exempt from the catch-all:
 
 ### 3.5 Trace ID — `ProblemDetailTraceAdvice` and `TraceIdResponseHeaderFilter`
 
-Both act only while a trace span is active, i.e. for requests sampled by Micrometer Tracing.
+Both act only while a trace span is active, which is the case for every request once Micrometer
+Tracing is on the classpath: Brave assigns a trace ID even to a request it does not sample, so
+the sampling probability does not affect whether the ID appears in responses.
 
 - `ProblemDetailTraceAdvice` adds `"traceId": "<hex>"` to every `ProblemDetail` body produced by an
   `@ExceptionHandler`. Normal responses are not touched.
 - `TraceIdResponseHeaderFilter` sets an `X-Trace-Id: <hex>` header on every response, success and
   error alike — or only on error responses (status 400+) with
-  `blocks.error.trace.header.error-only=true`. It runs at `Ordered.LOWEST_PRECEDENCE`, inside the
-  span started by `ServerHttpObservationFilter`.
+  `blocks.error.trace.header.error-only=true`. It runs at `Ordered.HIGHEST_PRECEDENCE + 2`, right
+  after the `ServerHttpObservationFilter` that starts the span, so the header also reaches
+  responses produced by filters that answer the request themselves (a Spring Security 401/403, a
+  CORS rejection).
 
 Errors raised outside Spring MVC (e.g. in a servlet filter) are rendered by Spring Boot's error
 controller, so they get neither a `code` nor a `traceId` body field.
@@ -372,8 +376,10 @@ are still dropped without error.
 ### 4.2 Tracing
 
 ```properties
-# Fraction of requests that are sampled, and so get a trace ID (0.0–1.0). Defaults to 0.1.
-# Set to 1.0 in development so every request gets an X-Trace-Id header and a traceId field.
+# Fraction of requests that are sampled, i.e. exported to your tracing backend (0.0–1.0).
+# Defaults to 0.1. It does not change whether responses carry an X-Trace-Id header and a traceId
+# field, but an unsampled request's ID will not be found in the backend: set it to 1.0 in
+# development to look every request up.
 management.tracing.sampling.probability=1.0
 
 # Only add the X-Trace-Id response header to error responses (status 400+). Defaults to false.
@@ -401,7 +407,9 @@ spring.servlet.multipart.max-request-size=50MB
 ```
 
 When either limit is exceeded Spring throws `MaxUploadSizeExceededException`, which
-`GlobalExceptionHandler` maps to 413 `PAYLOAD_TOO_LARGE`.
+`GlobalExceptionHandler` maps to 413 `PAYLOAD_TOO_LARGE`. Any other `MultipartException` — a
+multipart body that can't be parsed, or a non-multipart request sent to an endpoint expecting one —
+is answered as 400 `MALFORMED_MULTIPART_REQUEST`.
 
 ### 4.5 Logging
 
@@ -530,6 +538,7 @@ jakarta.validation.constraints.Size.message=o tamanho deve estar entre {min} e {
 | `ROUTE_NOT_FOUND`                 | 404    | No handler or static resource for the request path                            |
 | `REQUEST_TIMEOUT`                 | 503    | Async request timed out                                                       |
 | `PAYLOAD_TOO_LARGE`               | 413    | Upload exceeds configured limit                                               |
+| `MALFORMED_MULTIPART_REQUEST`     | 400    | Multipart body unparsable, or request not multipart                           |
 | `CONVERSION_NOT_SUPPORTED`        | 500    | No converter for property type                                                |
 | `PARAMETER_TYPE_MISMATCH`         | 400    | Query/path parameter type coercion failed                                     |
 | `MESSAGE_NOT_WRITABLE`            | 500    | Response body could not be serialised                                         |

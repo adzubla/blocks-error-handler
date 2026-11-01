@@ -19,7 +19,7 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
  *
  * <p>The {@code traceId} property is written only when a Brave/OTel span is active for the
  * current request (i.e. when {@link io.micrometer.tracing.Tracer#currentSpan()} is non-null).
- * If the {@link io.micrometer.tracing.Tracer} bean is absent from the application context the
+ * If there is no unique {@link io.micrometer.tracing.Tracer} bean in the application context the
  * advice is a no-op, so projects without Micrometer Tracing on the classpath are unaffected.
  *
  * <p>{@link #supports} is scoped to {@code @ExceptionHandler} methods, so normal
@@ -32,10 +32,10 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 @RestControllerAdvice
 public class ProblemDetailTraceAdvice implements ResponseBodyAdvice<Object> {
 
-    private final Tracer tracer;
+    private final ObjectProvider<Tracer> tracerProvider;
 
     public ProblemDetailTraceAdvice(ObjectProvider<Tracer> tracerProvider) {
-        this.tracer = tracerProvider.getIfAvailable();
+        this.tracerProvider = tracerProvider;
     }
 
     @Override
@@ -47,8 +47,10 @@ public class ProblemDetailTraceAdvice implements ResponseBodyAdvice<Object> {
     public Object beforeBodyWrite(Object body, MethodParameter returnType, MediaType selectedContentType,
                                   Class<? extends HttpMessageConverter<?>> selectedConverterType,
                                   ServerHttpRequest request, ServerHttpResponse response) {
-        if (body instanceof ProblemDetail pd && tracer != null) {
-            var span = tracer.currentSpan();
+        if (body instanceof ProblemDetail pd) {
+            // Looked up per request, and only when unique (see TraceIdResponseHeaderFilter).
+            var tracer = tracerProvider.getIfUnique();
+            var span = tracer != null ? tracer.currentSpan() : null;
             if (span != null) {
                 pd.setProperty("traceId", span.context().traceId());
             }

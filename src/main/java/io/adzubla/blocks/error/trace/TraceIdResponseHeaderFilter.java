@@ -16,10 +16,12 @@ import java.io.IOException;
 /**
  * Servlet filter that adds an {@value #HEADER_NAME} response header to HTTP responses.
  *
- * <p>The filter runs at {@link Ordered#LOWEST_PRECEDENCE}, making it the innermost filter in the
- * chain. At that point {@code ServerHttpObservationFilter} — which runs at a much earlier/outer
- * position — has already started the Brave/OTel span, so
- * {@link io.micrometer.tracing.Tracer#currentSpan()} is non-null for sampled requests.
+ * <p>The filter runs at {@link #ORDER}, immediately after {@code ServerHttpObservationFilter}
+ * ({@code HIGHEST_PRECEDENCE + 1}), which starts the Brave/OTel span, so
+ * {@link io.micrometer.tracing.Tracer#currentSpan()} is non-null for sampled requests. Running
+ * that early, ahead of filters such as Spring Security's, lets the header reach responses those
+ * filters produce themselves (a 401/403, a CORS rejection) and not only those that get as far as
+ * the servlet.
  *
  * <p>By default the header is added to every response, success and error alike, and is written
  * <em>before</em> delegating further so it is always present regardless of whether a downstream
@@ -35,22 +37,28 @@ import java.io.IOException;
  * class must still be on the classpath at load time; {@code ErrorTraceAutoConfiguration} registers
  * this filter only when it is.
  */
-@Order(Ordered.LOWEST_PRECEDENCE)
+@Order(TraceIdResponseHeaderFilter.ORDER)
 public class TraceIdResponseHeaderFilter extends OncePerRequestFilter {
+
+    /** Right after {@code ServerHttpObservationFilter}, which runs at {@code HIGHEST_PRECEDENCE + 1}. */
+    public static final int ORDER = Ordered.HIGHEST_PRECEDENCE + 2;
 
     static final String HEADER_NAME = "X-Trace-Id";
 
-    private final Tracer tracer;
+    private final ObjectProvider<Tracer> tracerProvider;
     private final boolean errorOnly;
 
     public TraceIdResponseHeaderFilter(ObjectProvider<Tracer> tracerProvider, TraceIdHeaderProperties properties) {
-        this.tracer = tracerProvider.getIfAvailable();
+        this.tracerProvider = tracerProvider;
         this.errorOnly = properties.isErrorOnly();
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
+        // Looked up per request, and only when unique: resolving it at construction would fail
+        // startup with several Tracer beans, or miss one that is registered later.
+        var tracer = tracerProvider.getIfUnique();
         var span = tracer != null ? tracer.currentSpan() : null;
         if (span == null) {
             filterChain.doFilter(request, response);
