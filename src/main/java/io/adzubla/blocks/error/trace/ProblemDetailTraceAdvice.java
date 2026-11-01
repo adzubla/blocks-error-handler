@@ -25,9 +25,8 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
  * <p>{@link #supports} is scoped to {@code @ExceptionHandler} methods, so normal
  * controller responses are never intercepted.
  *
- * <p>{@code io.micrometer.tracing.Tracer} is imported directly as a field type here, so
- * {@code ErrorTraceAutoConfiguration} registers this bean only when Micrometer Tracing is on the
- * classpath.
+ * <p>{@code ErrorTraceAutoConfiguration} registers this bean only when Micrometer Tracing is on
+ * the classpath.
  */
 @RestControllerAdvice
 public class ProblemDetailTraceAdvice implements ResponseBodyAdvice<Object> {

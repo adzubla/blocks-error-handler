@@ -31,11 +31,11 @@ import java.util.Map;
 
 /**
  * Translates Jackson 3 deserialization failures into RFC 9457
- * {@link org.springframework.http.ProblemDetail} responses with HTTP 400.
+ * {@link org.springframework.http.ProblemDetail} responses, HTTP 400 unless noted.
  *
- * <p>Intercepts {@link org.springframework.http.converter.HttpMessageNotReadableException} and
- * inspects its cause chain to produce a structured response with field path, rejected value,
- * expected type, and source location where applicable:
+ * <p>Handles {@link org.springframework.http.converter.HttpMessageNotReadableException} by
+ * inspecting its cause, adding field path, rejected value, expected type and source location
+ * where applicable:
  *
  * <ul>
  *   <li>{@code PropertyBindingException} (unrecognized or ignored property) → {@code UNKNOWN_JSON_FIELD}

@@ -21,7 +21,7 @@ import java.util.Set;
  *
  * <p>The filter runs at {@link #ORDER}, immediately after {@code ServerHttpObservationFilter}
  * ({@code HIGHEST_PRECEDENCE + 1}), which starts the Brave/OTel span, so
- * {@link io.micrometer.tracing.Tracer#currentSpan()} is non-null for sampled requests. Running
+ * {@link io.micrometer.tracing.Tracer#currentSpan()} is non-null. Running
  * that early, ahead of filters such as Spring Security's, lets the header reach responses those
  * filters produce themselves (a 401/403, a CORS rejection) and not only those that get as far as
  * the servlet.
@@ -38,11 +38,9 @@ import java.util.Set;
  * once the chain returns. A header already added cannot be taken back, so a status changed after the
  * body has started is not reconsidered.
  *
- * <p>If the {@link io.micrometer.tracing.Tracer} bean is absent the filter delegates without
- * setting the header, making the Micrometer Tracing bean itself optional at runtime. However, the
- * {@code io.micrometer.tracing.Tracer} class is imported directly as a field type here, so the
- * class must still be on the classpath at load time; {@code ErrorTraceAutoConfiguration} registers
- * this filter only when it is.
+ * <p>If there is no unique {@link io.micrometer.tracing.Tracer} bean, or no active span, the filter
+ * delegates without setting the header. {@code ErrorTraceAutoConfiguration} registers it only when
+ * Micrometer Tracing is on the classpath.
  */
 @Order(TraceIdResponseHeaderFilter.ORDER)
 public class TraceIdResponseHeaderFilter extends OncePerRequestFilter {

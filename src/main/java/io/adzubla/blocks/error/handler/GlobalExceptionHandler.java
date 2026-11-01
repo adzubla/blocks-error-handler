@@ -52,11 +52,11 @@ import java.util.stream.Stream;
  *
  * <p>Validation failures that reach this handler — only when {@link ValidationExceptionHandler} is
  * disabled or replaced — are answered with 422, matching their {@code VALIDATION_FAILED} code,
- * instead of Spring's default 400.
+ * instead of Spring's default 400. A {@link MultipartException} is answered with 400
+ * {@code MALFORMED_MULTIPART_REQUEST}.
  *
  * <p>A final {@code @ExceptionHandler(Exception.class)} catch-all returns 500
- * {@code INTERNAL_SERVER_ERROR} and logs the stack trace at {@code ERROR} level, with two
- * exceptions:
+ * {@code INTERNAL_SERVER_ERROR} and logs the stack trace at {@code ERROR} level, except for:
  * <ul>
  *   <li>Exceptions annotated with {@link ResponseStatus @ResponseStatus} (directly or on a
  *       superclass) keep their declared status and reason, with {@code code=ERROR_RESPONSE} —

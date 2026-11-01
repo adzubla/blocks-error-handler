@@ -21,7 +21,7 @@ import java.util.Objects;
 import java.util.regex.Pattern;
 
 /**
- * Translates JDBC data exceptions into RFC 9457 {@link org.springframework.http.ProblemDetail} responses.
+ * Translates Spring data-access exceptions into RFC 9457 {@link org.springframework.http.ProblemDetail} responses.
  *
  * <ul>
  *   <li>{@link org.springframework.dao.DuplicateKeyException} → 409 {@code DUPLICATE_VALUE}
@@ -49,15 +49,15 @@ import java.util.regex.Pattern;
  * forwarded to the client. {@code invalidValue} can be turned off with
  * {@code blocks.error.data.expose-invalid-value=false} (see {@link DataExceptionProperties}).
  *
- * <p>JPA's {@code EntityNotFoundException} is handled separately by
- * {@link JpaExceptionHandler}, which is only registered when JPA is on the classpath.
+ * <p>Raw JPA exceptions are handled by {@link JpaExceptionHandler}, and Spring Data's
+ * {@code PropertyReferenceException} by {@link SpringDataExceptionHandler}; both are only
+ * registered when their libraries are on the classpath.
  *
  * <p><b>Not handled here.</b> Every other {@code org.springframework.dao.DataAccessException}
  * subtype, and every raw JPA/JDBC exception that Spring's exception translation doesn't reach,
- * falls through to {@link GlobalExceptionHandler}'s {@code @ExceptionHandler(Exception.class)}
- * catch-all: HTTP 500, {@code code=INTERNAL_SERVER_ERROR}, a generic client-facing detail message,
- * and the full exception (including any raw SQL or driver-specific detail in the cause chain)
- * logged server-side at {@code ERROR}. Notable examples that land there instead of a 4xx response:
+ * falls through to {@link GlobalExceptionHandler}: HTTP 500, {@code INTERNAL_SERVER_ERROR}, a
+ * generic detail message, and the full exception logged server-side at {@code ERROR}. Notable
+ * examples:
  * <ul>
  *   <li>Transient/lock failures — {@code CannotAcquireLockException},
  *       {@code PessimisticLockingFailureException}, {@code DeadlockLoseDataAccessException},
@@ -68,14 +68,11 @@ import java.util.regex.Pattern;
  *       {@code BadSqlGrammarException}), {@code TypeMismatchDataAccessException}
  *   <li>{@code PermissionDeniedDataAccessException}, {@code UncategorizedDataAccessException} /
  *       {@code UncategorizedSQLException} (vendor {@code SQLException} Spring couldn't classify)
- *   <li>Raw JPA exceptions not routed through a Spring Data repository proxy —
- *       {@code jakarta.persistence.PersistenceException}, {@code PessimisticLockException},
- *       {@code LockTimeoutException}, {@code NonUniqueResultException},
- *       {@code TransactionRequiredException}, {@code RollbackException} — these are only translated
- *       into the {@code org.springframework.dao} hierarchy above when thrown from behind a
- *       {@code @Repository} bean under {@code PersistenceExceptionTranslationPostProcessor}.
- *       ({@code EntityNotFoundException}, {@code NoResultException}, {@code OptimisticLockException}
- *       and {@code EntityExistsException} are handled by {@link JpaExceptionHandler}.)
+ *   <li>Other raw JPA exceptions — {@code jakarta.persistence.PersistenceException},
+ *       {@code PessimisticLockException}, {@code LockTimeoutException},
+ *       {@code NonUniqueResultException}, {@code TransactionRequiredException},
+ *       {@code RollbackException} — which Spring translates into the types above only when they
+ *       are thrown from behind a {@code @Repository} bean
  * </ul>
  */
 @RestControllerAdvice
