@@ -4,8 +4,9 @@ import io.adzubla.blocks.error.handler.ConstraintViolationExceptionHandler;
 import io.adzubla.blocks.error.handler.DataExceptionHandler;
 import io.adzubla.blocks.error.handler.DataExceptionProperties;
 import io.adzubla.blocks.error.handler.GlobalExceptionHandler;
-import io.adzubla.blocks.error.handler.JpaEntityNotFoundExceptionHandler;
+import io.adzubla.blocks.error.handler.JpaExceptionHandler;
 import io.adzubla.blocks.error.handler.JsonExceptionHandler;
+import io.adzubla.blocks.error.handler.SpringDataExceptionHandler;
 import io.adzubla.blocks.error.handler.ValidationExceptionHandler;
 import io.adzubla.blocks.error.trace.ProblemDetailTraceAdvice;
 import io.adzubla.blocks.error.trace.TraceIdResponseHeaderFilter;
@@ -29,7 +30,8 @@ class ErrorHandlerAutoConfigurationTests {
     private static final List<Class<?>> HANDLERS = List.of(
             JsonExceptionHandler.class, ValidationExceptionHandler.class,
             ConstraintViolationExceptionHandler.class, DataExceptionHandler.class,
-            JpaEntityNotFoundExceptionHandler.class, GlobalExceptionHandler.class,
+            JpaExceptionHandler.class, SpringDataExceptionHandler.class,
+            GlobalExceptionHandler.class,
             ProblemDetailTraceAdvice.class, TraceIdResponseHeaderFilter.class);
 
     private final WebApplicationContextRunner runner = new WebApplicationContextRunner()
@@ -55,6 +57,7 @@ class ErrorHandlerAutoConfigurationTests {
                         "blocks.error.constraint-violation.enabled=false",
                         "blocks.error.data.enabled=false",
                         "blocks.error.jpa.enabled=false",
+                        "blocks.error.spring-data.enabled=false",
                         "blocks.error.global.enabled=false",
                         "blocks.error.trace.body.enabled=false",
                         "blocks.error.trace.header.enabled=false")
@@ -99,7 +102,7 @@ class ErrorHandlerAutoConfigurationTests {
                     assertThat(context).doesNotHaveBean(ConstraintViolationExceptionHandler.class);
                     assertThat(context).doesNotHaveBean(DataExceptionHandler.class);
                     assertThat(context).doesNotHaveBean(DataExceptionProperties.class);
-                    assertThat(context).doesNotHaveBean(JpaEntityNotFoundExceptionHandler.class);
+                    assertThat(context).doesNotHaveBean(JpaExceptionHandler.class);
                     assertThat(context).doesNotHaveBean(ProblemDetailTraceAdvice.class);
                     assertThat(context).doesNotHaveBean(TraceIdResponseHeaderFilter.class);
                     assertThat(context).hasSingleBean(GlobalExceptionHandler.class);

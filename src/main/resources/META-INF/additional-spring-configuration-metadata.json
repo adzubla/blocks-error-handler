@@ -31,10 +31,16 @@
       "description": "Whether to register DataExceptionHandler, which turns data access exceptions into 404/409 responses."
     },
     {
+      "name": "blocks.error.spring-data.enabled",
+      "type": "java.lang.Boolean",
+      "defaultValue": true,
+      "description": "Whether to register SpringDataExceptionHandler, which turns Spring Data PropertyReferenceException (e.g. an unknown sort property) into 400 responses."
+    },
+    {
       "name": "blocks.error.jpa.enabled",
       "type": "java.lang.Boolean",
       "defaultValue": true,
-      "description": "Whether to register JpaEntityNotFoundExceptionHandler, which turns JPA EntityNotFoundException into 404 responses."
+      "description": "Whether to register JpaExceptionHandler, which turns raw JPA exceptions (EntityNotFoundException, NoResultException, OptimisticLockException, EntityExistsException) into 404/409 responses."
     },
     {
       "name": "blocks.error.global.enabled",

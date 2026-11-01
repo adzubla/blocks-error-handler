@@ -38,7 +38,7 @@ This library replaces that with a single, consistent error contract:
 | `spring-boot-starter-webmvc`                                                                                | Required — servlet web applications only                                                                   |
 | `spring-boot-starter-validation`                                                                            | Optional — a Bean Validation provider, needed for any `VALIDATION_FAILED` response; also enables `ConstraintViolationExceptionHandler` |
 | `spring-tx` (via `spring-boot-starter-jdbc`, `spring-boot-starter-data-jpa`, any Spring Data starter, …)    | Optional — enables `DataExceptionHandler`                                                                  |
-| `spring-boot-starter-data-jpa`                                                                              | Optional — enables `JpaEntityNotFoundExceptionHandler`                                                     |
+| `spring-boot-starter-data-jpa`                                                                              | Optional — enables `JpaExceptionHandler` (and, via `spring-data-commons`, `SpringDataExceptionHandler`) |
 | `spring-boot-starter-actuator` + `spring-boot-micrometer-tracing-brave` + `micrometer-tracing-bridge-brave` | Optional — enables `traceId` in bodies and the `X-Trace-Id` header                                         |
 
 The optional dependencies are declared `<optional>true</optional>`, so they are **not** pulled into
@@ -89,7 +89,8 @@ Every bean can be switched off with a property, and the whole library with
 | `blocks.error.validation.enabled`           | `ValidationExceptionHandler`          |
 | `blocks.error.constraint-violation.enabled` | `ConstraintViolationExceptionHandler` |
 | `blocks.error.data.enabled`                 | `DataExceptionHandler`                |
-| `blocks.error.jpa.enabled`                  | `JpaEntityNotFoundExceptionHandler`   |
+| `blocks.error.jpa.enabled`                  | `JpaExceptionHandler`                 |
+| `blocks.error.spring-data.enabled`          | `SpringDataExceptionHandler`          |
 | `blocks.error.global.enabled`               | `GlobalExceptionHandler`              |
 | `blocks.error.trace.body.enabled`           | `ProblemDetailTraceAdvice`            |
 | `blocks.error.trace.header.enabled`         | `TraceIdResponseHeaderFilter`         |
@@ -212,10 +213,12 @@ A violation on a method's *return value* — controller or service — means the
 invalid data, not that the client sent it, so it is answered as 500 `INTERNAL_SERVER_ERROR` and
 logged at `ERROR`.
 
-### 3.3 `DataExceptionHandler` and `JpaEntityNotFoundExceptionHandler` — 404 / 409
+### 3.3 `DataExceptionHandler`, `JpaExceptionHandler` and `SpringDataExceptionHandler` — 400 / 404 / 409
 
 `DataExceptionHandler` handles Spring's data access exceptions (`org.springframework.dao.*`, from
-`spring-tx`); `JpaEntityNotFoundExceptionHandler` handles JPA's `EntityNotFoundException`.
+`spring-tx`); `JpaExceptionHandler` handles JPA's own exceptions, which reach the
+application untranslated when thrown outside a repository proxy; `SpringDataExceptionHandler` handles
+Spring Data's `PropertyReferenceException`.
 
 | Exception                           | Condition              | `code`                            | Status |
 |-------------------------------------|------------------------|-----------------------------------|--------|
@@ -226,6 +229,14 @@ logged at `ERROR`.
 | `OptimisticLockingFailureException` | any                    | `OPTIMISTIC_LOCKING_FAILURE`      | 409    |
 | `EmptyResultDataAccessException`    | any                    | `RESOURCE_NOT_FOUND`              | 404    |
 | `EntityNotFoundException` (JPA)     | any                    | `RESOURCE_NOT_FOUND`              | 404    |
+| `NoResultException` (JPA)           | any                    | `RESOURCE_NOT_FOUND`              | 404    |
+| `OptimisticLockException` (JPA)     | any                    | `OPTIMISTIC_LOCKING_FAILURE`      | 409    |
+| `EntityExistsException` (JPA)       | any                    | `DATA_INTEGRITY_VIOLATION`        | 409    |
+| `PropertyReferenceException` (Spring Data) | any             | `INVALID_PROPERTY_REFERENCE`      | 400    |
+
+`PropertyReferenceException` is what an unknown `?sort=` property produces. Repository proxies
+usually wrap it in an `InvalidDataAccessApiUsageException`; the handler still receives it, because
+Spring looks through the cause chain. The offending property name is returned as `invalidValue`.
 
 ```json
 {
@@ -271,14 +282,15 @@ any raw SQL or driver detail) logged server-side at `ERROR`. Examples:
 | Connectivity/config failures     | `DataAccessResourceFailureException`, `CannotGetJdbcConnectionException`                                                                                                                                                             |
 | Programming/schema errors        | `InvalidDataAccessResourceUsageException` (incl. `BadSqlGrammarException`), `TypeMismatchDataAccessException`                                                                                                                        |
 | Uncategorized                    | `PermissionDeniedDataAccessException`, `UncategorizedDataAccessException` / `UncategorizedSQLException`                                                                                                                              |
-| Raw JPA (not repository-proxied) | `PersistenceException`, `EntityExistsException`, `OptimisticLockException`, `PessimisticLockException`, `LockTimeoutException`, `NoResultException`, `NonUniqueResultException`, `TransactionRequiredException`, `RollbackException` |
+| Raw JPA (not repository-proxied) | `PersistenceException`, `PessimisticLockException`, `LockTimeoutException`, `NonUniqueResultException`, `TransactionRequiredException`, `RollbackException` |
 
 That last row matters in practice: Spring only translates JPA exceptions into the
 `org.springframework.dao` hierarchy when they're thrown from behind a `@Repository` bean under
 `PersistenceExceptionTranslationPostProcessor`. A JPA exception thrown directly from an
 `EntityManager` outside a repository proxy (e.g. in a `@Transactional` service method) keeps its
-native `jakarta.persistence` type and goes to the 500 catch-all — even `OptimisticLockException`,
-whose Spring-translated equivalent (`OptimisticLockingFailureException`) has a dedicated 409.
+native `jakarta.persistence` type. `EntityNotFoundException`, `NoResultException`,
+`OptimisticLockException` and `EntityExistsException` are answered like their Spring-translated
+equivalents (see the table above); the others go to the 500 catch-all.
 
 ### 3.4 `GlobalExceptionHandler` — Spring MVC infrastructure + catch-all
 
@@ -401,7 +413,8 @@ Each handler logs under its own class name, at a level that reflects who is at f
 | `ValidationExceptionHandler`          | `DEBUG`; `ERROR` with stack trace for return-value violations                                             |
 | `ConstraintViolationExceptionHandler` | `DEBUG`; `ERROR` with stack trace for return-value violations                                             |
 | `DataExceptionHandler`                | `WARN` for integrity violations and optimistic locking failures (including the raw database message); `DEBUG` for empty results |
-| `JpaEntityNotFoundExceptionHandler`   | `DEBUG`                                                                                                   |
+| `JpaExceptionHandler`                 | `DEBUG` for not-found; `WARN` for optimistic locking and entity-exists conflicts                          |
+| `SpringDataExceptionHandler`          | `DEBUG`                                                                                                   |
 | `GlobalExceptionHandler`              | `WARN` for 4xx; `ERROR` with stack trace for 5xx and unexpected exceptions                                |
 
 Client errors are logged as a one-line summary (status, code, field path or violation count); the
@@ -498,6 +511,7 @@ jakarta.validation.constraints.Size.message=o tamanho deve estar entre {min} e {
 | `TYPE_MISMATCH`                   | 400    | Wrong JSON token type for target                                              |
 | `NULL_VALUE_NOT_ALLOWED`          | 400    | `null` sent for a field that forbids it                                       |
 | `INVALID_TYPE_ID`                 | 400    | Unknown polymorphic type id                                                   |
+| `INVALID_PROPERTY_REFERENCE`      | 400    | Unknown property in a Spring Data `Sort` (e.g. `?sort=nope`)                  |
 | `INTEGER_OVERFLOW`                | 400    | Numeric value outside type range                                              |
 | `VALIDATION_FAILED`               | 422    | Bean Validation constraint failure                                            |
 | `METHOD_VALIDATION_ERROR`         | 500    | `MethodValidationException` reaching `GlobalExceptionHandler`, i.e. only when `blocks.error.validation.enabled=false` (otherwise it is a 422 `VALIDATION_FAILED`, or a 500 `INTERNAL_SERVER_ERROR` for a return value) |

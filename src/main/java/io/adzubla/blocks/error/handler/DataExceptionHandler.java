@@ -50,7 +50,7 @@ import java.util.regex.Pattern;
  * {@code blocks.error.data.expose-invalid-value=false} (see {@link DataExceptionProperties}).
  *
  * <p>JPA's {@code EntityNotFoundException} is handled separately by
- * {@link JpaEntityNotFoundExceptionHandler}, which is only registered when JPA is on the classpath.
+ * {@link JpaExceptionHandler}, which is only registered when JPA is on the classpath.
  *
  * <p><b>Not handled here.</b> Every other {@code org.springframework.dao.DataAccessException}
  * subtype, and every raw JPA/JDBC exception that Spring's exception translation doesn't reach,
@@ -69,12 +69,13 @@ import java.util.regex.Pattern;
  *   <li>{@code PermissionDeniedDataAccessException}, {@code UncategorizedDataAccessException} /
  *       {@code UncategorizedSQLException} (vendor {@code SQLException} Spring couldn't classify)
  *   <li>Raw JPA exceptions not routed through a Spring Data repository proxy —
- *       {@code jakarta.persistence.PersistenceException}, {@code EntityExistsException},
- *       {@code OptimisticLockException}, {@code PessimisticLockException},
- *       {@code LockTimeoutException}, {@code NoResultException}, {@code NonUniqueResultException},
+ *       {@code jakarta.persistence.PersistenceException}, {@code PessimisticLockException},
+ *       {@code LockTimeoutException}, {@code NonUniqueResultException},
  *       {@code TransactionRequiredException}, {@code RollbackException} — these are only translated
  *       into the {@code org.springframework.dao} hierarchy above when thrown from behind a
- *       {@code @Repository} bean under {@code PersistenceExceptionTranslationPostProcessor}
+ *       {@code @Repository} bean under {@code PersistenceExceptionTranslationPostProcessor}.
+ *       ({@code EntityNotFoundException}, {@code NoResultException}, {@code OptimisticLockException}
+ *       and {@code EntityExistsException} are handled by {@link JpaExceptionHandler}.)
  * </ul>
  */
 @RestControllerAdvice

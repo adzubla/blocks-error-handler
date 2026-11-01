@@ -4,8 +4,9 @@ import io.adzubla.blocks.error.handler.ConstraintViolationExceptionHandler;
 import io.adzubla.blocks.error.handler.DataExceptionHandler;
 import io.adzubla.blocks.error.handler.DataExceptionProperties;
 import io.adzubla.blocks.error.handler.GlobalExceptionHandler;
-import io.adzubla.blocks.error.handler.JpaEntityNotFoundExceptionHandler;
+import io.adzubla.blocks.error.handler.JpaExceptionHandler;
 import io.adzubla.blocks.error.handler.JsonExceptionHandler;
+import io.adzubla.blocks.error.handler.SpringDataExceptionHandler;
 import io.adzubla.blocks.error.handler.ValidationExceptionHandler;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -82,6 +83,18 @@ public class ErrorHandlerAutoConfiguration {
     }
 
     @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = "org.springframework.data.core.PropertyReferenceException")
+    static class SpringDataConfiguration {
+
+        @Bean
+        @ConditionalOnMissingBean
+        @ConditionalOnBooleanProperty(name = "blocks.error.spring-data.enabled", matchIfMissing = true)
+        SpringDataExceptionHandler springDataExceptionHandler(MessageSource messageSource) {
+            return new SpringDataExceptionHandler(messageSource);
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
     @ConditionalOnClass(name = "jakarta.validation.ConstraintViolationException")
     static class BeanValidationConfiguration {
 
@@ -100,8 +113,8 @@ public class ErrorHandlerAutoConfiguration {
         @Bean
         @ConditionalOnMissingBean
         @ConditionalOnBooleanProperty(name = "blocks.error.jpa.enabled", matchIfMissing = true)
-        JpaEntityNotFoundExceptionHandler jpaEntityNotFoundExceptionHandler(MessageSource messageSource) {
-            return new JpaEntityNotFoundExceptionHandler(messageSource);
+        JpaExceptionHandler jpaExceptionHandler(MessageSource messageSource) {
+            return new JpaExceptionHandler(messageSource);
         }
     }
 }

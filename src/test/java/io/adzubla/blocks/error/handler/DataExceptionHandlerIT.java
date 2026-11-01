@@ -4,7 +4,10 @@ import com.example.demo.DemoApplication;
 import com.example.demo.TestcontainersConfiguration;
 import com.example.demo.product.Product;
 import com.example.demo.product.ProductRepository;
+import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
+import jakarta.persistence.NoResultException;
+import jakarta.persistence.OptimisticLockException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -13,13 +16,16 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.data.domain.Sort;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -171,6 +177,60 @@ class DataExceptionHandlerIT {
                 .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
     }
 
+    // --- raw JPA exceptions (not translated by a repository proxy) ---
+
+    @Test
+    void rawNoResult_returnsNotFound() throws Exception {
+        mvc.perform(post("/test/exceptions/jpa-no-result"))
+                .andDo(print())
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+    }
+
+    @Test
+    void rawOptimisticLock_returnsConflict() throws Exception {
+        mvc.perform(post("/test/exceptions/jpa-optimistic-lock"))
+                .andDo(print())
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("OPTIMISTIC_LOCKING_FAILURE"))
+                .andExpect(jsonPath("$.title").value("Concurrent modification"));
+    }
+
+    @Test
+    void rawEntityExists_returnsConflict() throws Exception {
+        mvc.perform(post("/test/exceptions/jpa-entity-exists"))
+                .andDo(print())
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("DATA_INTEGRITY_VIOLATION"));
+    }
+
+    // --- Spring Data ---
+
+    @Test
+    void unknownSortProperty_returnsBadRequest() throws Exception {
+        mvc.perform(get("/test/exceptions/sorted").param("sort", "nonexistent"))
+                .andDo(print())
+                .andExpect(status().isBadRequest())
+                .andExpect(header().exists("X-Trace-Id"))
+                .andExpect(jsonPath("$.code").value("INVALID_PROPERTY_REFERENCE"))
+                .andExpect(jsonPath("$.invalidValue").value("nonexistent"))
+                .andExpect(jsonPath("$.detail").value("Unknown property 'nonexistent'"));
+    }
+
+    @Test
+    void unknownSortProperty_withPtBrLocale_returnsPortugueseMessages() throws Exception {
+        mvc.perform(get("/test/exceptions/sorted").param("sort", "nonexistent")
+                        .header("Accept-Language", "pt-BR"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Referência de propriedade inválida"));
+    }
+
+    @Test
+    void validSortProperty_isNotAnError() throws Exception {
+        mvc.perform(get("/test/exceptions/sorted").param("sort", "name"))
+                .andExpect(status().isOk());
+    }
+
     @TestConfiguration
     static class ExceptionHandlerTestConfig {
 
@@ -191,6 +251,26 @@ class DataExceptionHandlerIT {
         ExceptionTriggerController(ProductRepository productRepository, JdbcTemplate jdbc) {
             this.productRepository = productRepository;
             this.jdbc = jdbc;
+        }
+
+        @GetMapping("/sorted")
+        void sorted(@org.springframework.web.bind.annotation.RequestParam String sort) {
+            productRepository.findAll(Sort.by(sort));
+        }
+
+        @PostMapping("/jpa-no-result")
+        void jpaNoResult() {
+            throw new NoResultException("no entity found for query");
+        }
+
+        @PostMapping("/jpa-optimistic-lock")
+        void jpaOptimisticLock() {
+            throw new OptimisticLockException("row was updated or deleted by another transaction");
+        }
+
+        @PostMapping("/jpa-entity-exists")
+        void jpaEntityExists() {
+            throw new EntityExistsException("entity already exists");
         }
 
         // JPA findById miss → EntityNotFoundException → handleEntityNotFound

@@ -35,7 +35,7 @@
     </dependencyManagement>
 
     <dependencies>
-        <!-- Optional: required only for JpaEntityNotFoundExceptionHandler, which is gated behind
+        <!-- Optional: required only for JpaExceptionHandler, which is gated behind
              @ConditionalOnClass(EntityNotFoundException.class). Consumers not using JPA don't pull
              this in. -->
         <dependency>
