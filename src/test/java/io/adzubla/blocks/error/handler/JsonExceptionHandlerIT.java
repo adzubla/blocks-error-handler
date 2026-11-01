@@ -537,12 +537,90 @@ class JsonExceptionHandlerIT {
                 .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("[in_stock, sold_out]")));
     }
 
+    @Test
+    void nullForNonNullableField_returnsNullValueNotAllowed() throws Exception {
+        mvc.perform(post("/test/json/non-null")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":null}"))
+                .andDo(print())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("NULL_VALUE_NOT_ALLOWED"))
+                .andExpect(jsonPath("$.path").value("$.name"));
+    }
+
+    @Test
+    void unknownPolymorphicTypeId_returnsInvalidTypeId() throws Exception {
+        mvc.perform(post("/test/json/animal")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"type\":\"fish\"}"))
+                .andDo(print())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_TYPE_ID"))
+                .andExpect(jsonPath("$.invalidValue").value("fish"))
+                .andExpect(jsonPath("$.expectedType").value("Animal"));
+    }
+
+    @Test
+    void constructorRejectingValue_returnsInvalidFieldValue() throws Exception {
+        mvc.perform(post("/test/json/picky")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"x\"}"))
+                .andDo(print())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_FIELD_VALUE"))
+                .andExpect(jsonPath("$.expectedType").value("PickyRequest"));
+    }
+
+    @Test
+    void undeserializableTargetType_returns500() throws Exception {
+        mvc.perform(post("/test/json/abstract")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"a\":1}"))
+                .andDo(print())
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"));
+    }
+
+    @Test
+    void unprovidedInjectableValue_returns500() throws Exception {
+        mvc.perform(post("/test/json/injectable")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"a\":1}"))
+                .andDo(print())
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"));
+    }
+
     enum StockStatus {
         @JsonProperty("in_stock") IN_STOCK,
         @JsonProperty("sold_out") SOLD_OUT
     }
 
     record StockRequest(StockStatus status) {
+    }
+
+    record NonNullRequest(@com.fasterxml.jackson.annotation.JsonSetter(nulls = com.fasterxml.jackson.annotation.Nulls.FAIL)
+                          String name) {
+    }
+
+    @com.fasterxml.jackson.annotation.JsonTypeInfo(use = com.fasterxml.jackson.annotation.JsonTypeInfo.Id.NAME, property = "type")
+    @com.fasterxml.jackson.annotation.JsonSubTypes(@com.fasterxml.jackson.annotation.JsonSubTypes.Type(value = Dog.class, name = "dog"))
+    interface Animal {
+    }
+
+    record Dog() implements Animal {
+    }
+
+    record PickyRequest(String name) {
+        PickyRequest {
+            throw new IllegalArgumentException("rejected");
+        }
+    }
+
+    interface Unmappable {
+    }
+
+    record InjectableRequest(@com.fasterxml.jackson.annotation.JacksonInject String dep) {
     }
 
     @TestConfiguration
@@ -557,6 +635,26 @@ class JsonExceptionHandlerIT {
     static class StockController {
         @PostMapping("/test/json/stock")
         void stock(@RequestBody StockRequest request) {
+        }
+
+        @PostMapping("/test/json/non-null")
+        void nonNull(@RequestBody NonNullRequest request) {
+        }
+
+        @PostMapping("/test/json/animal")
+        void animal(@RequestBody Animal request) {
+        }
+
+        @PostMapping("/test/json/picky")
+        void picky(@RequestBody PickyRequest request) {
+        }
+
+        @PostMapping("/test/json/injectable")
+        void injectable(@RequestBody InjectableRequest request) {
+        }
+
+        @PostMapping("/test/json/abstract")
+        void unmappable(@RequestBody Unmappable request) {
         }
     }
 }

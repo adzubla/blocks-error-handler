@@ -17,8 +17,12 @@ import tools.jackson.core.exc.InputCoercionException;
 import tools.jackson.core.exc.StreamReadException;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.exc.InvalidFormatException;
+import tools.jackson.databind.exc.InvalidNullException;
+import tools.jackson.databind.exc.InvalidTypeIdException;
 import tools.jackson.databind.exc.MismatchedInputException;
-import tools.jackson.databind.exc.UnrecognizedPropertyException;
+import tools.jackson.databind.exc.MissingInjectableValueException;
+import tools.jackson.databind.exc.PropertyBindingException;
+import tools.jackson.databind.exc.ValueInstantiationException;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.Arrays;
@@ -34,10 +38,16 @@ import java.util.Map;
  * expected type, and source location where applicable:
  *
  * <ul>
- *   <li>{@code UnrecognizedPropertyException} → {@code UNKNOWN_JSON_FIELD} (known fields listed)
+ *   <li>{@code PropertyBindingException} (unrecognized or ignored property) → {@code UNKNOWN_JSON_FIELD}
+ *       (known fields listed)
  *   <li>{@code InvalidFormatException} on an enum → {@code INVALID_ENUM_VALUE} (valid values listed)
  *   <li>{@code InvalidFormatException} on a scalar → {@code INVALID_FIELD_VALUE}
+ *   <li>{@code InvalidNullException} → {@code NULL_VALUE_NOT_ALLOWED}
+ *   <li>{@code InvalidTypeIdException} → {@code INVALID_TYPE_ID}
  *   <li>{@code MismatchedInputException} → {@code TYPE_MISMATCH}
+ *   <li>{@code ValueInstantiationException} → {@code INVALID_FIELD_VALUE}
+ *   <li>{@code MissingInjectableValueException} → 500 {@code INTERNAL_SERVER_ERROR} (a server-side
+ *       mapping defect, not a client error)
  *   <li>{@code InputCoercionException} → {@code INTEGER_OVERFLOW} (valid range included)
  *   <li>{@code StreamReadException} → {@code MALFORMED_JSON} (line/column included)
  *   <li>Anything else → {@code MALFORMED_REQUEST_BODY}
@@ -115,7 +125,7 @@ public class JsonExceptionHandler {
     public ResponseEntity<ProblemDetail> handle(HttpMessageNotReadableException ex) {
         var cause = ex.getCause();
 
-        if (cause instanceof UnrecognizedPropertyException upe) {
+        if (cause instanceof PropertyBindingException upe) {
             var problem = unrecognizedProperty(upe);
             log.debug("{} {}: Unknown JSON field: {}",
                     HttpStatus.BAD_REQUEST.value(), problem.code(), upe.getPropertyName());
@@ -127,6 +137,39 @@ public class JsonExceptionHandler {
             log.debug("{} {}: Invalid JSON format at path {}: {}",
                     HttpStatus.BAD_REQUEST.value(), problem.code(), jsonPath(ife.getPath()), ife.getMessage());
             log.trace("Stack trace:", ife);
+            return badRequest(problem.toProblemDetail());
+        }
+        if (cause instanceof InvalidNullException ine) {
+            var problem = invalidNull(ine);
+            log.debug("{} {}: Null not allowed at path {}: {}",
+                    HttpStatus.BAD_REQUEST.value(), problem.code(), jsonPath(ine.getPath()), ine.getMessage());
+            log.trace("Stack trace:", ine);
+            return badRequest(problem.toProblemDetail());
+        }
+        if (cause instanceof InvalidTypeIdException itie) {
+            var problem = invalidTypeId(itie);
+            log.debug("{} {}: Invalid type id at path {}: {}",
+                    HttpStatus.BAD_REQUEST.value(), problem.code(), jsonPath(itie.getPath()), itie.getMessage());
+            log.trace("Stack trace:", itie);
+            return badRequest(problem.toProblemDetail());
+        }
+        if (cause instanceof MissingInjectableValueException) {
+            // The client sent nothing wrong: the target type declares an injectable value nobody provides.
+            // (InvalidDefinitionException never gets here: Spring wraps it in HttpMessageConversionException,
+            // which GlobalExceptionHandler answers with the same 500.)
+            log.error("{} {}: Unusable JSON mapping for request body",
+                    HttpStatus.INTERNAL_SERVER_ERROR.value(), ErrorCode.INTERNAL_SERVER_ERROR, cause);
+            var problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,
+                    msg("error.internal.detail"));
+            problem.setTitle(msg("error.internal.title"));
+            problem.setProperty("code", ErrorCode.INTERNAL_SERVER_ERROR.name());
+            return ResponseEntity.internalServerError().body(problem);
+        }
+        if (cause instanceof ValueInstantiationException vie) {
+            var problem = valueInstantiation(vie);
+            log.debug("{} {}: Cannot instantiate value at path {}: {}",
+                    HttpStatus.BAD_REQUEST.value(), problem.code(), jsonPath(vie.getPath()), vie.getMessage());
+            log.trace("Stack trace:", vie);
             return badRequest(problem.toProblemDetail());
         }
         if (cause instanceof MismatchedInputException mie) {
@@ -190,7 +233,7 @@ public class JsonExceptionHandler {
                 null, null, typeName, null, range, line, column, ErrorCode.INTEGER_OVERFLOW);
     }
 
-    private JsonProblem unrecognizedProperty(UnrecognizedPropertyException ex) {
+    private JsonProblem unrecognizedProperty(PropertyBindingException ex) {
         var known = ex.getKnownPropertyIds();
         List<String> validValues = known != null
                 ? known.stream().map(Object::toString).toList()
@@ -232,6 +275,30 @@ public class JsonExceptionHandler {
         var typeName = targetType != null ? targetType.getSimpleName() : null;
         return new JsonProblem(msg("error.type-mismatch.title"), detail,
                 path, null, typeName, null, null, null, null, ErrorCode.TYPE_MISMATCH);
+    }
+
+    private JsonProblem invalidNull(InvalidNullException ex) {
+        var path = jsonPath(ex.getPath());
+        return new JsonProblem(msg("error.null-value.title"), msg("error.null-value.detail", path),
+                path, null, null, null, null, null, null, ErrorCode.NULL_VALUE_NOT_ALLOWED);
+    }
+
+    private JsonProblem invalidTypeId(InvalidTypeIdException ex) {
+        var path = jsonPath(ex.getPath());
+        var base = ex.getBaseType();
+        var baseName = base != null ? base.getRawClass().getSimpleName() : null;
+        return new JsonProblem(msg("error.invalid-type-id.title"),
+                msg("error.invalid-type-id.detail", ex.getTypeId(), baseName != null ? baseName : "?", path),
+                path, ex.getTypeId(), baseName, null, null, null, null, ErrorCode.INVALID_TYPE_ID);
+    }
+
+    private JsonProblem valueInstantiation(ValueInstantiationException ex) {
+        var path = jsonPath(ex.getPath());
+        var type = ex.getType();
+        var typeName = type != null ? type.getRawClass().getSimpleName() : "?";
+        return new JsonProblem(msg("error.invalid-value.title"),
+                msg("error.invalid-instance.detail", typeName, path),
+                path, null, typeName, null, null, null, null, ErrorCode.INVALID_FIELD_VALUE);
     }
 
     private String jsonValue(Object enumConstant) {

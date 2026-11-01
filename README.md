@@ -4,7 +4,7 @@ Reusable Spring Boot 4 auto-configuration that turns exceptions into structured
 [RFC 9457 Problem Details](https://www.rfc-editor.org/rfc/rfc9457) responses and
 propagates the Micrometer trace ID to every response.
 
-## Why use this library
+## 1 Why use this library
 
 Out of the box, Spring Boot answers most failures with a generic body — `BasicErrorController`'s
 `timestamp` / `status` / `error` / `path` object, or Spring's default Problem Details — that says
@@ -28,9 +28,9 @@ This library replaces that with a single, consistent error contract:
 - **Drop-in auto-configuration.** Declare the dependency — no `@Import`, no `@ComponentScan`, no
   boilerplate.
 
-## Getting started
+## 2 Getting started
 
-### Requirements
+### 2.1 Requirements
 
 | Dependency                                                                                                  | Notes                                                                                                      |
 |-------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------|
@@ -47,7 +47,7 @@ isn't registered. `JsonExceptionHandler`, `ValidationExceptionHandler` and `Glob
 are always registered (though Spring MVC only validates when a Bean Validation provider is
 present).
 
-### Installation
+### 2.2 Installation
 
 ```xml
 <dependency>
@@ -77,7 +77,7 @@ For trace IDs, also add:
 The JAR ships two auto-configurations, `ErrorHandlerAutoConfiguration` (the exception handlers) and
 `ErrorTraceAutoConfiguration` (`ProblemDetailTraceAdvice` and `TraceIdResponseHeaderFilter`).
 
-### Disabling or replacing a handler
+### 2.3 Disabling or replacing a handler
 
 Every bean can be switched off with a property, and the whole library with
 `blocks.error.enabled=false`:
@@ -125,24 +125,28 @@ class MyDataExceptionHandler extends DataExceptionHandler {
 `spring.mvc.problemdetails.enabled=true` Spring Boot's own `ResponseEntityExceptionHandler` backs
 off in its favour rather than competing with it.
 
-## Handlers
+## 3 Handlers
 
-### `JsonExceptionHandler` — 400 Bad Request
+### 3.1 `JsonExceptionHandler` — 400 Bad Request
 
 Handles `HttpMessageNotReadableException` and maps its Jackson 3 cause to a structured response:
 
 | Cause                             | `code`                   | Extra fields                                          |
 |-----------------------------------|--------------------------|-------------------------------------------------------|
-| `UnrecognizedPropertyException`   | `UNKNOWN_JSON_FIELD`     | `path`, `validValues` (the known fields)              |
+| `PropertyBindingException` (unrecognized or ignored field) | `UNKNOWN_JSON_FIELD` | `path`, `validValues` (the known fields)              |
 | `InvalidFormatException` (enum)   | `INVALID_ENUM_VALUE`     | `path`, `invalidValue`, `expectedType`, `validValues` |
 | `InvalidFormatException` (scalar) | `INVALID_FIELD_VALUE`    | `path`, `invalidValue`, `expectedType`                |
+| `InvalidNullException`            | `NULL_VALUE_NOT_ALLOWED` | `path`                                                |
+| `InvalidTypeIdException`          | `INVALID_TYPE_ID`        | `path`, `invalidValue`, `expectedType`                |
 | `MismatchedInputException`        | `TYPE_MISMATCH`          | `path`, `expectedType`                                |
+| `ValueInstantiationException`     | `INVALID_FIELD_VALUE`    | `path`, `expectedType`                                |
+| `MissingInjectableValueException` | `INTERNAL_SERVER_ERROR` (500) | — (server-side mapping defect)                        |
 | `InputCoercionException`          | `INTEGER_OVERFLOW`       | `expectedType`, `validRange`, `line`, `column`        |
 | `StreamReadException`             | `MALFORMED_JSON`         | `line`, `column`                                      |
 | Other (e.g. missing body)         | `MALFORMED_REQUEST_BODY` | —                                                     |
 
 `UNKNOWN_JSON_FIELD` requires Jackson to reject unknown fields, which Spring Boot doesn't do by
-default (see [Configuration](#jackson--unknown-fields)). For enums, `validValues` lists each
+default (see [Configuration](#41-jackson--unknown-fields)). For enums, `validValues` lists each
 constant the way your `JsonMapper` writes it, so `@JsonProperty` / `@JsonValue` names are listed
 rather than the Java constant names.
 
@@ -161,7 +165,7 @@ rather than the Java constant names.
 }
 ```
 
-### `ValidationExceptionHandler` and `ConstraintViolationExceptionHandler` — 422 Unprocessable Content
+### 3.2 `ValidationExceptionHandler` and `ConstraintViolationExceptionHandler` — 422 Unprocessable Content
 
 Both answer Bean Validation failures with `code=VALIDATION_FAILED` and the same response shape:
 
@@ -200,13 +204,13 @@ Each violation has:
 - **`invalidValue`** — the rejected value as a string; JSON `null` when the rejected value was
   `null`; absent when there is no single rejected value (a class-level constraint, or a
   `HandlerMethodValidationException`).
-- **`message`** — the constraint message (see [Validation constraint messages](#validation-constraint-messages)).
+- **`message`** — the constraint message (see [Validation constraint messages](#53-validation-constraint-messages)).
 
 A violation on a method's *return value* — controller or service — means the server produced
 invalid data, not that the client sent it, so it is answered as 500 `INTERNAL_SERVER_ERROR` and
 logged at `ERROR`.
 
-### `DataExceptionHandler` and `JpaEntityNotFoundExceptionHandler` — 404 / 409
+### 3.3 `DataExceptionHandler` and `JpaEntityNotFoundExceptionHandler` — 404 / 409
 
 `DataExceptionHandler` handles Spring's data access exceptions (`org.springframework.dao.*`, from
 `spring-tx`); `JpaEntityNotFoundExceptionHandler` handles JPA's `EntityNotFoundException`.
@@ -248,11 +252,11 @@ The handler is designed for PostgreSQL:
   translated) and exposed as `invalidValue`; it is omitted when it can't be extracted. It is the
   value *as stored by the database*, which is not necessarily what the client sent — e.g. for a
   unique index on a derived or server-generated column. If that is a concern, turn it off (see
-  [Configuration](#data-access--invalidvalue)). The column name is deliberately not exposed: it
+  [Configuration](#43-data-access--invalidvalue)). The column name is deliberately not exposed: it
   may not match a client-facing field name at all (different casing, a related entity, a generated
   key).
 
-#### Unhandled data access exceptions
+#### 3.3.1 Unhandled data access exceptions
 
 Every other `org.springframework.dao.DataAccessException` subtype, and any raw JPA exception
 Spring's translation never reaches, falls through to `GlobalExceptionHandler`'s catch-all:
@@ -274,11 +278,11 @@ That last row matters in practice: Spring only translates JPA exceptions into th
 native `jakarta.persistence` type and goes to the 500 catch-all — even `OptimisticLockException`,
 whose Spring-translated equivalent (`OptimisticLockingFailureException`) has a dedicated 409.
 
-### `GlobalExceptionHandler` — Spring MVC infrastructure + catch-all
+### 3.4 `GlobalExceptionHandler` — Spring MVC infrastructure + catch-all
 
 Extends `ResponseEntityExceptionHandler` to handle the standard Spring MVC exceptions (405, 415,
 400, 404, 413, 503, …), adding a stable `code` to each (see the
-[error code reference](#error-code-reference)). Their `title` and `detail` are Spring's own.
+[error code reference](#6-error-code-reference)). Their `title` and `detail` are Spring's own.
 
 ```json
 {
@@ -315,7 +319,7 @@ Two kinds of exception are exempt from the catch-all:
   `@PreAuthorize`) are rethrown, so Spring Security's `ExceptionTranslationFilter` produces its
   usual 401/403 response. Spring Security stays an optional dependency.
 
-### Trace ID — `ProblemDetailTraceAdvice` and `TraceIdResponseHeaderFilter`
+### 3.5 Trace ID — `ProblemDetailTraceAdvice` and `TraceIdResponseHeaderFilter`
 
 Both act only while a trace span is active, i.e. for requests sampled by Micrometer Tracing.
 
@@ -329,9 +333,9 @@ Both act only while a trace span is active, i.e. for requests sampled by Microme
 Errors raised outside Spring MVC (e.g. in a servlet filter) are rendered by Spring Boot's error
 controller, so they get neither a `code` nor a `traceId` body field.
 
-## Configuration
+## 4 Configuration
 
-### Jackson — unknown fields
+### 4.1 Jackson — unknown fields
 
 ```properties
 # Required for UNKNOWN_JSON_FIELD responses. Without it, Jackson silently ignores unrecognised
@@ -339,7 +343,19 @@ controller, so they get neither a `code` nor a `traceId` body field.
 spring.jackson.deserialization.fail-on-unknown-properties=true
 ```
 
-### Tracing
+Properties marked `@JsonIgnore` / `@JsonIgnoreProperties` are a separate case: by default Jackson
+accepts them in the payload and silently drops them. To reject them, enable:
+
+```properties
+spring.jackson.deserialization.fail-on-ignored-properties=true
+```
+
+Jackson then throws `IgnoredPropertyException`, which `JsonExceptionHandler` reports as
+`UNKNOWN_JSON_FIELD` too (same `path` and `validValues` fields), so clients see one code for
+"this field is not accepted". With only `fail-on-unknown-properties` enabled, ignored properties
+are still dropped without error.
+
+### 4.2 Tracing
 
 ```properties
 # Fraction of requests that are sampled, and so get a trace ID (0.0–1.0). Defaults to 0.1.
@@ -353,7 +369,7 @@ blocks.error.trace.header.error-only=true
 To stop exposing trace IDs without removing the tracing dependencies, use
 `blocks.error.trace.body.enabled=false` and `blocks.error.trace.header.enabled=false`.
 
-### Data access — `invalidValue`
+### 4.3 Data access — `invalidValue`
 
 ```properties
 # Omit invalidValue from DUPLICATE_VALUE / REFERENTIAL_INTEGRITY_VIOLATION responses.
@@ -361,7 +377,7 @@ To stop exposing trace IDs without removing the tracing dependencies, use
 blocks.error.data.expose-invalid-value=false
 ```
 
-### File upload size (for `PAYLOAD_TOO_LARGE`)
+### 4.4 File upload size (for `PAYLOAD_TOO_LARGE`)
 
 ```properties
 # Maximum size of a single uploaded file (default: 1MB)
@@ -373,7 +389,7 @@ spring.servlet.multipart.max-request-size=50MB
 When either limit is exceeded Spring throws `MaxUploadSizeExceededException`, which
 `GlobalExceptionHandler` maps to 413 `PAYLOAD_TOO_LARGE`.
 
-### Logging
+### 4.5 Logging
 
 Each handler logs under its own class name, at a level that reflects who is at fault:
 
@@ -402,7 +418,7 @@ Spring MVC also logs some exceptions itself — e.g. a `WARN` for every 405, und
 logging.level.org.springframework.web.servlet.PageNotFound=ERROR
 ```
 
-## Internationalisation (i18n)
+## 5 Internationalisation (i18n)
 
 The `title` and `detail` the library writes are resolved with the locale from
 `LocaleContextHolder` at exception-handling time. Each key is looked up first in the application's
@@ -420,7 +436,7 @@ never clashes with the application's `messages.properties` and is found regardle
 | `messages.properties`                   | English (fallback)  |
 | `messages_pt_BR.properties`             | Portuguese — Brazil |
 
-### Overriding messages and adding a locale
+### 5.1 Overriding messages and adding a locale
 
 Define any key in your application's own message bundle (by default `messages*.properties`) and it
 takes precedence over the library's text; keys you don't define keep the library's text. To add a
@@ -435,7 +451,7 @@ error.resource-not-found.detail=El recurso solicitado no fue encontrado.
 # … remaining keys …
 ```
 
-### Locale resolution
+### 5.2 Locale resolution
 
 By default, Spring MVC's `AcceptHeaderLocaleResolver` maps the `Accept-Language` request header to
 a `java.util.Locale`. When the header names a locale with no matching bundle (e.g. `fr`), the
@@ -455,7 +471,7 @@ LocaleResolver localeResolver() {
 }
 ```
 
-### Validation constraint messages
+### 5.3 Validation constraint messages
 
 The `violations[].message` field comes from **Bean Validation**, not from the `MessageSource`
 above. Spring's validator interpolates it with the request locale, and Hibernate Validator ships
@@ -468,7 +484,7 @@ jakarta.validation.constraints.NotBlank.message=não pode estar em branco
 jakarta.validation.constraints.Size.message=o tamanho deve estar entre {min} e {max}
 ```
 
-## Error code reference
+## 6 Error code reference
 
 | `code`                            | Status | Meaning                                                                       |
 |-----------------------------------|--------|-------------------------------------------------------------------------------|
@@ -478,6 +494,8 @@ jakarta.validation.constraints.Size.message=o tamanho deve estar entre {min} e {
 | `INVALID_ENUM_VALUE`              | 400    | Value not in enum constants                                                   |
 | `INVALID_FIELD_VALUE`             | 400    | Value cannot be coerced to target type                                        |
 | `TYPE_MISMATCH`                   | 400    | Wrong JSON token type for target                                              |
+| `NULL_VALUE_NOT_ALLOWED`          | 400    | `null` sent for a field that forbids it                                       |
+| `INVALID_TYPE_ID`                 | 400    | Unknown polymorphic type id                                                   |
 | `INTEGER_OVERFLOW`                | 400    | Numeric value outside type range                                              |
 | `VALIDATION_FAILED`               | 422    | Bean Validation constraint failure                                            |
 | `METHOD_VALIDATION_ERROR`         | 500    | `MethodValidationException` (e.g. `MethodValidationPostProcessor` with `adaptConstraintViolations=true`) |
