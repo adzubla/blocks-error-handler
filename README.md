@@ -85,7 +85,7 @@ Errors handled by Spring MVC look like this, plus the extra fields described in 
 }
 ```
 
-`code` is the stable field to branch on (see the [guide for API consumers](#9-guide-for-api-consumers)).
+`code` is the stable field to branch on (see the [guide for API consumers](#10-guide-for-api-consumers)).
 `title` and `detail` are for people and can be [translated or reworded](#8-internationalisation-i18n).
 
 Two kinds of error don't use this format: the 401/403 responses written by
@@ -94,8 +94,8 @@ filter, which Spring Boot's error controller renders.
 
 ### 3.2 JSON request body errors
 
-The Exception column shows the Jackson 3 failure. Spring delivers most of these as the cause of an
-`HttpMessageNotReadableException`.
+The Exception column shows the Jackson 3 failure where there is one. Spring delivers most of these as
+the cause of an `HttpMessageNotReadableException`.
 
 | Situation                                                | Exception                                                       | `code`                   | Status | Extra fields                                          |
 |----------------------------------------------------------|-----------------------------------------------------------------|--------------------------|--------|-------------------------------------------------------|
@@ -173,7 +173,8 @@ Each violation has:
 
 - **`path`**: the JSONPath-style location in the request (see the table below).
 - **`invalidValue`**: the rejected value as a string, or JSON `null` if the value was `null`. It is
-  absent when there is no single rejected value (a class-level or cross-parameter constraint).
+  absent when there is no single rejected value (a class-level or cross-parameter constraint), so the
+  contents of the object are not returned.
 - **`message`**: the constraint message (see
   [Validation constraint messages](#83-validation-constraint-messages)).
 
@@ -185,9 +186,15 @@ Each violation has:
 | An element of a collection parameter     | `tag(List<@NotBlank String> tags)`          | `$.tags[1]`        |
 | A field of a validated service parameter | `create(@Valid Request request)`            | `$.name`           |
 | A whole object, or several parameters    | A class-level or cross-parameter constraint | `$`                |
+| A nested object as a whole               | A class-level constraint on `address`       | `$.address`        |
 
 Paths from a service layer are best-effort: a service can't know how its parameters map to the
 request, so it assumes the validated object is the request body.
+
+**Cross-parameter constraints may not run on their own.** On a controller, or on a service with
+`adapt-constraint-violations=true`, Spring only raises an exception when a parameter also has a violation.
+If the cross-parameter constraint is the only failure, the method runs as if the input were valid. Don't
+rely on one there for a check that must hold. On a service with the default setting it is always reported.
 
 ### 3.4 Data access errors
 
@@ -244,27 +251,28 @@ a missing one and for a row that others still reference.
 
 ### 3.5 Spring MVC and unexpected errors
 
-| Situation                                                                             | Exception                                                                         | `code`                        | Status | Extra fields |
-|---------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------|-------------------------------|--------|--------------|
-| HTTP method not supported                                                             | `HttpRequestMethodNotSupportedException`                                          | `METHOD_NOT_ALLOWED`          | 405    | none         |
-| `Content-Type` not accepted                                                           | `HttpMediaTypeNotSupportedException`                                              | `UNSUPPORTED_MEDIA_TYPE`      | 415    | none         |
-| Requested `Accept` type unavailable                                                   | `HttpMediaTypeNotAcceptableException`                                             | `NOT_ACCEPTABLE`              | 406    | none         |
-| No handler or static resource for the path                                            | `NoResourceFoundException`, `NoHandlerFoundException`                             | `ROUTE_NOT_FOUND`             | 404    | none         |
-| Required query parameter absent                                                       | `MissingServletRequestParameterException`                                         | `MISSING_REQUEST_PARAMETER`   | 400    | none         |
-| Required multipart part absent                                                        | `MissingServletRequestPartException`                                              | `MISSING_REQUEST_PART`        | 400    | none         |
-| Other binding failure, e.g. missing header or cookie                                  | `ServletRequestBindingException`                                                  | `REQUEST_BINDING_ERROR`       | 400    | none         |
-| Query or path parameter of the wrong type                                             | `TypeMismatchException`                                                           | `PARAMETER_TYPE_MISMATCH`     | 400    | none         |
-| Upload exceeds the configured limit                                                   | `MaxUploadSizeExceededException`                                                  | `PAYLOAD_TOO_LARGE`           | 413    | none         |
-| Multipart body unparsable, or request not multipart                                   | `MultipartException`                                                              | `MALFORMED_MULTIPART_REQUEST` | 400    | none         |
-| Async request timed out                                                               | `AsyncRequestTimeoutException`                                                    | `REQUEST_TIMEOUT`             | 503    | none         |
-| Path variable declared but absent from the mapping                                    | `MissingPathVariableException`                                                    | `MISSING_PATH_VARIABLE`       | 500    | none         |
-| No converter for a property type                                                      | `ConversionNotSupportedException`                                                 | `CONVERSION_NOT_SUPPORTED`    | 500    | none         |
-| Response body could not be serialised                                                 | `HttpMessageNotWritableException`                                                 | `MESSAGE_NOT_WRITABLE`        | 500    | none         |
-| Exception with a declared status (see [Your own exceptions](#36-your-own-exceptions)) | `ResponseStatusException`, `ErrorResponseException`, `@ResponseStatus` exceptions | `ERROR_RESPONSE`              | varies | none         |
-| Any other exception                                                                   | `Exception`                                                                       | `INTERNAL_SERVER_ERROR`       | 500    | none         |
+| Situation                                                                                                         | Exception                                                                         | `code`                        | Status | Extra fields |
+|-------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------|-------------------------------|--------|--------------|
+| HTTP method not supported                                                                                         | `HttpRequestMethodNotSupportedException`                                          | `METHOD_NOT_ALLOWED`          | 405    | none         |
+| `Content-Type` not accepted                                                                                       | `HttpMediaTypeNotSupportedException`                                              | `UNSUPPORTED_MEDIA_TYPE`      | 415    | none         |
+| Requested `Accept` type unavailable                                                                               | `HttpMediaTypeNotAcceptableException`                                             | `NOT_ACCEPTABLE`              | 406    | none         |
+| No handler or static resource for the path                                                                        | `NoResourceFoundException`, `NoHandlerFoundException`                             | `ROUTE_NOT_FOUND`             | 404    | none         |
+| Required query parameter absent                                                                                   | `MissingServletRequestParameterException`                                         | `MISSING_REQUEST_PARAMETER`   | 400    | none         |
+| Required multipart part absent                                                                                    | `MissingServletRequestPartException`                                              | `MISSING_REQUEST_PART`        | 400    | none         |
+| Other binding failure, e.g. missing header or cookie                                                              | `ServletRequestBindingException`                                                  | `REQUEST_BINDING_ERROR`       | 400    | none         |
+| Query or path parameter of the wrong type                                                                         | `TypeMismatchException`                                                           | `PARAMETER_TYPE_MISMATCH`     | 400    | none         |
+| Upload exceeds the configured limit                                                                               | `MaxUploadSizeExceededException`                                                  | `PAYLOAD_TOO_LARGE`           | 413    | none         |
+| Multipart body unparsable, or request not multipart                                                               | `MultipartException`                                                              | `MALFORMED_MULTIPART_REQUEST` | 400    | none         |
+| Async request timed out                                                                                           | `AsyncRequestTimeoutException`                                                    | `REQUEST_TIMEOUT`             | 503    | none         |
+| Path variable declared but absent from the mapping                                                                | `MissingPathVariableException`                                                    | `MISSING_PATH_VARIABLE`       | 500    | none         |
+| No converter for a property type                                                                                  | `ConversionNotSupportedException`                                                 | `CONVERSION_NOT_SUPPORTED`    | 500    | none         |
+| Response body could not be serialised                                                                             | `HttpMessageNotWritableException`                                                 | `MESSAGE_NOT_WRITABLE`        | 500    | none         |
+| Exception with a declared status (see [Exceptions with a declared status](#93-exceptions-with-a-declared-status)) | `ResponseStatusException`, `ErrorResponseException`, `@ResponseStatus` exceptions | `ERROR_RESPONSE`              | varies | none         |
+| Any other exception                                                                                               | `Exception`                                                                       | `INTERNAL_SERVER_ERROR`       | 500    | none         |
 
-Spring MVC errors keep Spring's own status, `title` and `detail`. The last row uses a generic body and
-is logged at `ERROR` with its stack trace, unless your own code handles the exception. You don't need
+Spring MVC errors keep Spring's own status, `title` and `detail`, except `MALFORMED_MULTIPART_REQUEST`,
+which has the library's status and text. The last row uses a generic body and is logged at `ERROR` with its
+stack trace, unless [your own code handles the exception](#9-custom-error-handling). You don't need
 `spring.mvc.problemdetails.enabled`, and setting it causes no conflict.
 
 Upload limits are set with:
@@ -275,38 +283,6 @@ spring.servlet.multipart.max-file-size=10MB
 # Maximum size of the entire multipart request (default: 10MB)
 spring.servlet.multipart.max-request-size=50MB
 ```
-
-### 3.6 Your own exceptions
-
-**With the built-in `code`.** These become Problem Details bodies with their declared status and
-`code=ERROR_RESPONSE`:
-
-- `ResponseStatusException`
-- `ErrorResponseException` and its subclasses. A `code` you set on one is replaced by `ERROR_RESPONSE`.
-- exceptions annotated with `@ResponseStatus`, directly or on a superclass. The annotation's `reason`
-  becomes `detail`, and is resolved as a message code if one matches.
-
-**With your own `code`.** Write an `@ExceptionHandler` returning a `ProblemDetail`. It takes precedence
-over the catch-all, and `traceId` is added for you:
-
-```java
-@RestControllerAdvice
-class OrderExceptionHandler {
-
-    @ExceptionHandler(OrderClosedException.class)
-    ResponseEntity<ProblemDetail> handle(OrderClosedException ex) {
-        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "The order is closed.");
-        problem.setProperty("code", "ORDER_CLOSED");
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
-    }
-}
-```
-
-**Precedence over this library.** The library's specific handlers run before an advice with no `@Order`.
-This applies to any exception they cover, and also to your own exception when one of those is its
-*cause*: a `MyException` wrapping a `DataIntegrityViolationException` gets the library's 409, not your
-handler for `MyException`. To take over, annotate your advice with `@Order(Ordered.HIGHEST_PRECEDENCE)`,
-or [replace the library's handler](#6-disabling-or-replacing-handlers).
 
 ## 4 Trace ID
 
@@ -386,8 +362,10 @@ Exceptions a disabled handler would have covered fall through to `GlobalExceptio
 defaults if that is disabled too:
 
 - JSON errors become 400 `MALFORMED_REQUEST_BODY`.
-- Spring MVC validation errors become 422 `VALIDATION_FAILED` with Spring's body, without `violations`.
-- Data access, JPA and `ConstraintViolationException` errors become 500 `INTERNAL_SERVER_ERROR`.
+- Spring MVC validation errors become 422 `VALIDATION_FAILED` with Spring's body, without `violations`. A
+  `MethodValidationException` becomes 500 `METHOD_VALIDATION_ERROR`, a code that only occurs in this setup.
+- Data access, JPA, `PropertyReferenceException` and `ConstraintViolationException` errors become 500
+  `INTERNAL_SERVER_ERROR`.
 
 To customise a handler instead, declare your own bean of the same type, typically a subclass overriding
 one method. The library's bean then backs off:
@@ -449,6 +427,9 @@ Each message is looked up first in your application's `MessageSource`, then in t
 a key in your own bundle (by default `messages*.properties`) to reword it, or in a new locale file to add a
 language. Keys you don't define keep the library's text.
 
+**A base `messages.properties` must exist**, even if empty. Without it Spring Boot doesn't create a
+`MessageSource`, and your locale files are silently ignored.
+
 ```properties
 # src/main/resources/messages_es.properties
 error.validation-failed.title=Validación fallida
@@ -460,26 +441,30 @@ error.resource-not-found.detail=El recurso solicitado no fue encontrado.
 The full list of keys is in `io/adzubla/blocks/error/messages.properties` inside the JAR. In messages that
 take arguments (`{0}`), write a literal apostrophe as `''`.
 
-The text of Spring MVC errors is Spring's own. Spring looks it up in your `MessageSource` under
-`problemDetail.title.<exception class>` and `problemDetail.<exception class>`.
+The text of Spring MVC errors, other than `MALFORMED_MULTIPART_REQUEST`, is Spring's own. Spring looks it up
+in your `MessageSource` under `problemDetail.title.<exception class>` and `problemDetail.<exception class>`.
 
 ### 8.2 Locale resolution
 
 The locale comes from the `Accept-Language` header by default. To use a cookie or session instead, declare a
 `LocaleResolver` bean.
 
-A header naming a locale with no translation (e.g. `fr`) gets English, never the server's JVM locale. When the
-header is absent, Spring uses the JVM default locale. To pin that too:
+A header naming a locale with no translation (e.g. `fr`) gets the library's English text, not its text for the
+server's JVM locale. Your own bundle behaves differently: by default, Spring Boot falls back to the JVM locale
+there, so on a `pt_BR` server, `fr` gets the keys you defined in `messages_pt_BR.properties`. When the header is
+absent, Spring uses the JVM default locale. To get English in both cases:
 
 ```properties
+spring.messages.fallback-to-system-locale=false
 spring.web.locale=en
 ```
 
 ### 8.3 Validation constraint messages
 
-`violations[].message` comes from Bean Validation, not from the `MessageSource` above. Hibernate Validator
+`violations[].message` comes from Bean Validation, not from the library's keys above. Hibernate Validator
 ships translations for many languages, including Portuguese. To override or add messages, put a
-`ValidationMessages_<locale>.properties` file on your classpath:
+`ValidationMessages_<locale>.properties` file on your classpath. Spring Boot also resolves a `{key}` in a
+constraint message from your `MessageSource`, so those keys can live in `messages*.properties` instead.
 
 ```properties
 # src/main/resources/ValidationMessages_pt_BR.properties
@@ -487,11 +472,171 @@ jakarta.validation.constraints.NotBlank.message=não pode estar em branco
 jakarta.validation.constraints.Size.message=o tamanho deve estar entre {min} e {max}
 ```
 
-## 9 Guide for API consumers
+## 9 Custom error handling
+
+An exception from your own business logic is a generic 500 `INTERNAL_SERVER_ERROR` unless you handle it.
+To answer it in the same format as every other error, write an `@ExceptionHandler` that returns a
+`ProblemDetail` with a `code` property. `code` is a plain string, so your codes need no registration.
+
+### 9.1 Handling a single exception
+
+```java
+@RestControllerAdvice
+class OrderExceptionHandler {
+
+    @ExceptionHandler(OrderClosedException.class)
+    ResponseEntity<ProblemDetail> handle(OrderClosedException ex) {
+        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "The order is closed.");
+        problem.setTitle("Order closed");
+        problem.setProperty("code", "ORDER_CLOSED");
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+    }
+}
+```
+
+The library adds `traceId` and the `X-Trace-Id` header, and Spring adds `instance`:
+
+```json
+{
+  "title": "Order closed",
+  "status": 409,
+  "detail": "The order is closed.",
+  "instance": "/orders/42/items",
+  "code": "ORDER_CLOSED",
+  "traceId": "69fcf2db21f488679d633abb34871dbb"
+}
+```
+
+Without `setTitle`, `title` is the HTTP status text, such as `Conflict`.
+
+### 9.2 Handling many exceptions with a base class
+
+For several business exceptions, give them a base class that carries the code, the status and the message
+arguments, and write one handler for all of them:
+
+```java
+public abstract class BusinessException extends RuntimeException {
+
+    private final String code;
+    private final HttpStatus status;
+    private final Object[] args;
+
+    protected BusinessException(String code, HttpStatus status, String message, Object... args) {
+        super(message);
+        this.code = code;
+        this.status = status;
+        this.args = args;
+    }
+
+    public String getCode() { return code; }
+    public HttpStatus getStatus() { return status; }
+    public Object[] getArgs() { return args; }
+}
+
+public class OrderClosedException extends BusinessException {
+
+    public OrderClosedException(long orderId) {
+        super("ORDER_CLOSED", HttpStatus.CONFLICT, "Order " + orderId + " is closed.", String.valueOf(orderId));
+    }
+}
+```
+
+```java
+@RestControllerAdvice
+class BusinessExceptionHandler {
+
+    private final MessageSource messageSource;
+
+    BusinessExceptionHandler(MessageSource messageSource) {
+        this.messageSource = messageSource;
+    }
+
+    @ExceptionHandler(BusinessException.class)
+    ResponseEntity<ProblemDetail> handle(BusinessException ex) {
+        var locale = LocaleContextHolder.getLocale();
+        var key = "error." + ex.getCode().toLowerCase(Locale.ROOT).replace('_', '-');
+        var detail = messageSource.getMessage(key + ".detail", ex.getArgs(), ex.getMessage(), locale);
+
+        var problem = ProblemDetail.forStatusAndDetail(ex.getStatus(), detail);
+        problem.setTitle(messageSource.getMessage(key + ".title", null, ex.getStatus().getReasonPhrase(), locale));
+        problem.setProperty("code", ex.getCode());
+        return ResponseEntity.status(ex.getStatus()).body(problem);
+    }
+}
+```
+
+The text is translated like the library's own, from your message bundle, and the keys follow the library's
+style: `ORDER_CLOSED` uses `error.order-closed.title` and `error.order-closed.detail`. A key you don't define
+falls back to the exception's message and the HTTP status text. As in
+[Overriding messages](#81-overriding-messages-and-adding-a-locale), a base `messages.properties` must exist:
+
+```properties
+# src/main/resources/messages_pt_BR.properties
+error.order-closed.title=Pedido encerrado
+error.order-closed.detail=O pedido {0} está encerrado.
+```
+
+Pass numbers as strings, as `OrderClosedException` does, because message formatting would otherwise render
+`1234567` as `1,234,567`.
+
+### 9.3 Exceptions with a declared status
+
+If you don't need your own code, these become Problem Details bodies with their declared status and
+`code=ERROR_RESPONSE`:
+
+- `ResponseStatusException`
+- `ErrorResponseException` and its subclasses. A `code` you set on one is replaced by `ERROR_RESPONSE`.
+- exceptions annotated with `@ResponseStatus`, directly or on a superclass. The annotation's `reason`
+  becomes `detail`, and is resolved as a message code if one matches.
+
+### 9.4 Precedence over this library
+
+Your handlers run before the library's catch-all, with no `@Order` needed. There are two things to watch for:
+
+- **The library's specific handlers run first.** This applies to any exception they cover, and also to your
+  own exception when one of those is its *cause*: a `MyException` wrapping a
+  `DataIntegrityViolationException` gets the library's 409, not your handler for `MyException`. To take over,
+  annotate your advice with `@Order(Ordered.HIGHEST_PRECEDENCE)`, or
+  [replace the library's handler](#6-disabling-or-replacing-handlers).
+- **Don't handle `Exception.class` yourself.** With no `@Order`, such a handler also takes the Spring MVC
+  errors, so a 405 or an unknown route would get your response instead of the library's. Handle your own
+  exception types and leave the rest to the catch-all.
+
+### 9.5 Good practices
+
+- **Keep codes stable.** A code is part of your API's contract: use `UPPER_SNAKE_CASE`, give each code one
+  meaning, and don't rename it once clients depend on it.
+- **Reuse a library code when the meaning is the same.** For a missing resource, use
+  `ErrorCode.RESOURCE_NOT_FOUND.name()` rather than inventing a new code.
+- **Choose the status by who must act.** Use 404 for a missing resource, 409 for a conflict with the current
+  state, 422 for values that break a rule, and 5xx only for faults on the server.
+- **Write `detail` for the client.** Don't include stack traces, SQL, internal identifiers or the message of a
+  third-party exception. Log those instead.
+- **Log by fault.** Log client errors as a one-line summary at `DEBUG` or `WARN`, and server faults at `ERROR`
+  with the stack trace. The library doesn't log exceptions your handler takes.
+- **Reuse the library's extra fields.** Use `path`, `invalidValue`, `validValues` and `violations` with the
+  same meaning they have elsewhere. A business rule on a field can use the validation format, so clients
+  handle both the same way:
+
+  ```java
+  var status = HttpStatus.UNPROCESSABLE_CONTENT;
+  var problem = ProblemDetail.forStatusAndDetail(status, "One or more fields failed validation");
+  problem.setTitle("Validation failed");
+  problem.setProperty("code", ErrorCode.VALIDATION_FAILED.name());
+  problem.setProperty("violations", List.of(Map.of(
+          "path", "$.quantity",
+          "invalidValue", "500",
+          "message", "exceeds the stock available")));
+  return ResponseEntity.status(status).body(problem);
+  ```
+
+- **Document your codes.** Add them to your copy of the [guide for API consumers](#10-guide-for-api-consumers).
+
+## 10 Guide for API consumers
 
 The subsections below are written for your API's clients, so you can copy them into its documentation.
 
-### 9.1 Error response shape
+### 10.1 Error response shape
 
 Errors follow [RFC 9457 Problem Details](https://www.rfc-editor.org/rfc/rfc9457) and are sent with
 `Content-Type: application/problem+json`:
@@ -522,7 +667,7 @@ These fields are part of every error, except where marked optional:
 | `instance` | string | Always   | Path of the request                                         |
 | `traceId`  | string | Optional | ID to quote when reporting a problem                        |
 
-These fields are all optional, and appear only for some codes (see [Error codes](#93-error-codes)):
+These fields are all optional, and appear only for some codes (see [Error codes](#103-error-codes)):
 
 | Field          | Type             | Presence | Description                                                   |
 |----------------|------------------|----------|---------------------------------------------------------------|
@@ -558,10 +703,10 @@ Each `violations` entry has:
 }
 ```
 
-### 9.2 Handling errors
+### 10.2 Handling errors
 
 - **Use `code` in your logic, not the text.** `title`, `detail` and `message` can change and depend on the
-  language. Send `Accept-Language` to ask for a language; English is used if it isn't available.
+  language. Send `Accept-Language` to ask for a language; the API uses a default language if it isn't available.
 - **Expect new codes.** An API can add its own codes, so fall back to the HTTP status for a code you don't
   recognise.
 - **Don't assume every error has this body.** 401 and 403 responses can have an empty body, and some other
@@ -569,7 +714,7 @@ Each `violations` entry has:
 - **Quote the trace ID when reporting a problem.** Use `traceId` from the body, or the `X-Trace-Id` response
   header. The header can also appear on successful responses, and is usually absent from 401 and 403.
 
-### 9.3 Error codes
+### 10.3 Error codes
 
 Extra fields are included when the API has the information, so treat them as optional even for a code
 that lists them.
@@ -631,7 +776,6 @@ the trace ID, except for `REQUEST_TIMEOUT`, which you can retry later.
 | The API can't process this route          | `MISSING_PATH_VARIABLE`    | 500    | none         |
 | The API can't convert a value it received | `CONVERSION_NOT_SUPPORTED` | 500    | none         |
 | The API can't write the response          | `MESSAGE_NOT_WRITABLE`     | 500    | none         |
-| The API failed to validate the request    | `METHOD_VALIDATION_ERROR`  | 500    | none         |
 | The request took too long to process      | `REQUEST_TIMEOUT`          | 503    | none         |
 
 **API-specific errors.** The status and meaning depend on the endpoint, so see its documentation.
