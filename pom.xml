@@ -122,13 +122,8 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- Test: tracing runtime. Actuator + Brave bridge provide the observation filter and the real
-             Tracer bean that the trace integration tests exercise. -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-actuator</artifactId>
-            <scope>test</scope>
-        </dependency>
+        <!-- Test: tracing runtime. The Brave module and bridge provide the observation filter and the
+             real Tracer bean that the trace integration tests exercise. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-micrometer-tracing-brave</artifactId>
