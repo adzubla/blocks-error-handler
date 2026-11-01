@@ -170,8 +170,9 @@ rather than the Java constant names.
 Both answer Bean Validation failures with `code=VALIDATION_FAILED` and the same response shape:
 
 - `ValidationExceptionHandler` handles Spring MVC's own validation: `MethodArgumentNotValidException`
-  (`@Valid` on a `@RequestBody`) and `HandlerMethodValidationException` (constraints on individual
-  controller parameters).
+  (`@Valid` on a `@RequestBody`), `HandlerMethodValidationException` (constraints on individual
+  controller parameters) and `MethodValidationException` (`@Validated` beans when
+  `spring.validation.method.adapt-constraint-violations=true`).
 - `ConstraintViolationExceptionHandler` handles `ConstraintViolationException`, raised by
   `@Validated` on non-controller beans (e.g. a service layer) or by direct `Validator` calls.
 
@@ -195,15 +196,16 @@ Each violation has:
 - **`path`** — a JSONPath-style location in the client's request input (the body, a path variable
   or a query parameter), so every `VALIDATION_FAILED` response uses one notation no matter which
   layer validated it. A constraint on the request object as a whole (a class-level constraint) is
-  reported as `$`. For `ConstraintViolationException` the path drops Java-only names — the method
+  reported as `$`. A constrained element of a collection parameter carries its index, e.g.
+  `List<@NotBlank String> tags` reports `$.tags[1]`. For `ConstraintViolationException` the path drops Java-only names — the method
   name, and a parameter name when the violation is on a property of that parameter — so
   `create(@Valid Request request)` reports `$.name`, `find(@NotBlank String code)` reports `$.code`
   and `tag(List<@NotBlank String> tags)` reports `$.tags[0]`. This is best-effort: a service method
   can't know how its parameters map back to the request, so it assumes the validated object is the
   request body.
 - **`invalidValue`** — the rejected value as a string; JSON `null` when the rejected value was
-  `null`; absent when there is no single rejected value (a class-level constraint, or a
-  `HandlerMethodValidationException`).
+  `null`; absent when there is no single rejected value (a class-level or cross-parameter
+  constraint).
 - **`message`** — the constraint message (see [Validation constraint messages](#53-validation-constraint-messages)).
 
 A violation on a method's *return value* — controller or service — means the server produced
@@ -498,7 +500,7 @@ jakarta.validation.constraints.Size.message=o tamanho deve estar entre {min} e {
 | `INVALID_TYPE_ID`                 | 400    | Unknown polymorphic type id                                                   |
 | `INTEGER_OVERFLOW`                | 400    | Numeric value outside type range                                              |
 | `VALIDATION_FAILED`               | 422    | Bean Validation constraint failure                                            |
-| `METHOD_VALIDATION_ERROR`         | 500    | `MethodValidationException` (e.g. `MethodValidationPostProcessor` with `adaptConstraintViolations=true`) |
+| `METHOD_VALIDATION_ERROR`         | 500    | `MethodValidationException` reaching `GlobalExceptionHandler`, i.e. only when `blocks.error.validation.enabled=false` (otherwise it is a 422 `VALIDATION_FAILED`, or a 500 `INTERNAL_SERVER_ERROR` for a return value) |
 | `DUPLICATE_VALUE`                 | 409    | Unique constraint violated                                                    |
 | `REFERENTIAL_INTEGRITY_VIOLATION` | 409    | Foreign key constraint violated                                               |
 | `DATA_INTEGRITY_VIOLATION`        | 409    | Other integrity constraint violated                                           |

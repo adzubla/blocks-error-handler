@@ -10,6 +10,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
+import org.springframework.validation.method.MethodValidationException;
+import org.springframework.validation.method.MethodValidationResult;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -22,13 +24,17 @@ import java.util.Map;
  * Translates Bean Validation failures into RFC 9457 {@link org.springframework.http.ProblemDetail}
  * responses with HTTP 422 Unprocessable Content.
  *
- * <p>Handles two exception types:
+ * <p>Handles three exception types:
  * <ul>
  *   <li>{@link org.springframework.web.bind.MethodArgumentNotValidException} — raised by
  *       {@code @Valid} on {@code @RequestBody} parameters; violations are collected from the
  *       {@link org.springframework.validation.BindingResult}.
  *   <li>{@link org.springframework.web.method.annotation.HandlerMethodValidationException} — raised
  *       by Spring MVC's built-in method validation of controller parameters and return values.
+ *   <li>{@link org.springframework.validation.method.MethodValidationException} — raised by
+ *       {@code @Validated} beans when method-validation violations are adapted
+ *       ({@code spring.validation.method.adapt-constraint-violations=true}); answered like the
+ *       controller case.
  * </ul>
  *
  * <p>{@code jakarta.validation.ConstraintViolationException} — raised by {@code @Validated} on
@@ -41,7 +47,8 @@ import java.util.Map;
  *   <li>{@code path} — JSONPath notation (e.g. {@code $.address.street}); {@code $} for a
  *       constraint on the request object as a whole
  *   <li>{@code invalidValue} — serialised as string; JSON {@code null} when the value is
- *       {@code null}; absent for an object-level constraint, which has no single rejected value
+ *       {@code null}; absent for an object-level or cross-parameter constraint, which has no single
+ *       rejected value
  *   <li>{@code message} — the constraint violation message
  * </ul>
  *
@@ -80,28 +87,31 @@ public class ValidationExceptionHandler {
     @ExceptionHandler(HandlerMethodValidationException.class)
     public ResponseEntity<ProblemDetail> handleHandlerMethodValidation(
             HandlerMethodValidationException ex) {
-        if (ex.isForReturnValue()) {
+        return methodValidation(ex, ex.isForReturnValue(), ex);
+    }
+
+    /**
+     * Raised by {@code @Validated} beans when {@code MethodValidationPostProcessor} adapts
+     * constraint violations ({@code spring.validation.method.adapt-constraint-violations=true}).
+     */
+    @ExceptionHandler(MethodValidationException.class)
+    public ResponseEntity<ProblemDetail> handleMethodValidation(MethodValidationException ex) {
+        return methodValidation(ex, ex.isForReturnValue(), ex);
+    }
+
+    private ResponseEntity<ProblemDetail> methodValidation(
+            MethodValidationResult result, boolean forReturnValue, Exception ex) {
+        if (forReturnValue) {
             return returnValueViolation(ex);
         }
-        var violations = ex.getParameterValidationResults().stream()
-                .flatMap(result -> result.getResolvableErrors().stream()
-                        .map(error -> {
-                            String field = result.getMethodParameter().getParameterName();
-                            if (error instanceof FieldError fe) {
-                                field = fe.getField();
-                            }
-                            return Violations.withoutValue("$." + (field != null ? field : "?"),
-                                    error.getDefaultMessage());
-                        }))
-                .toList();
-
-        log.debug("{} {}: Handler method validation failed with {} violation(s)",
+        var violations = Violations.of(result);
+        log.debug("{} {}: Method validation failed with {} violation(s)",
                 HttpStatus.UNPROCESSABLE_CONTENT.value(), ErrorCode.VALIDATION_FAILED, violations.size());
         log.trace("Stack trace:", ex);
         return unprocessable(violations);
     }
 
-    private ResponseEntity<ProblemDetail> returnValueViolation(HandlerMethodValidationException ex) {
+    private ResponseEntity<ProblemDetail> returnValueViolation(Exception ex) {
         log.error("{} {}: Return value constraint violation",
                 HttpStatus.INTERNAL_SERVER_ERROR.value(), ErrorCode.INTERNAL_SERVER_ERROR, ex);
         var problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,

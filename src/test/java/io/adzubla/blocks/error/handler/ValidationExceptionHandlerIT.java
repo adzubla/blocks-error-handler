@@ -9,6 +9,7 @@ import jakarta.validation.ConstraintValidatorContext;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Payload;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.hamcrest.Matchers;
@@ -23,9 +24,11 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.lang.annotation.ElementType;
@@ -275,7 +278,43 @@ class ValidationExceptionHandlerIT {
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.violations").isArray())
                 .andExpect(jsonPath("$.violations[?(@.path=='$.id')]").exists())
+                .andExpect(jsonPath("$.violations[?(@.path=='$.id')].invalidValue", hasItem("-1")))
                 .andExpect(jsonPath("$.traceId").isString());
+    }
+
+    @Test
+    void constrainedContainerElement_reportsIndexedPathAndElementValue() throws Exception {
+        mvc.perform(get("/test/constraint-violation/tags").param("tags", "ok", ""))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.violations.length()").value(1))
+                .andExpect(jsonPath("$.violations[0].path").value("$.tags[1]"))
+                .andExpect(jsonPath("$.violations[0].invalidValue").value(""));
+    }
+
+    @Test
+    void classLevelConstraintAlongsideParameterConstraint_reportsRootPath() throws Exception {
+        mvc.perform(post("/test/constraint-violation/mixed").param("page", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"min\":5,\"max\":1}"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.violations.length()").value(1))
+                .andExpect(jsonPath("$.violations[0].path").value("$"))
+                .andExpect(jsonPath("$.violations[0].message").value("min must not exceed max"));
+    }
+
+    @Test
+    void bodyFieldAndParameterConstraint_reportBothPaths() throws Exception {
+        mvc.perform(post("/test/constraint-violation/mixed-named").param("page", "0")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"\"}"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.violations[?(@.path=='$.name')]").exists())
+                .andExpect(jsonPath("$.violations[?(@.path=='$.page')].invalidValue", hasItem("0")));
     }
 
     @Test
@@ -792,6 +831,19 @@ class ValidationExceptionHandlerIT {
         @PostMapping("/return-value")
         void triggerReturnValue() {
             service.brokenLookup();
+        }
+
+        @GetMapping("/tags")
+        void tags(@RequestParam List<@NotBlank String> tags) {
+        }
+
+        // A constraint on another parameter turns @Valid on the body into method validation.
+        @PostMapping("/mixed")
+        void mixed(@RequestBody @Valid Range range, @RequestParam @Min(1) int page) {
+        }
+
+        @PostMapping("/mixed-named")
+        void mixedNamed(@RequestBody @Valid Named named, @RequestParam @Min(1) int page) {
         }
 
         @PostMapping("/range")
