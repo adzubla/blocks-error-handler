@@ -9,9 +9,12 @@ import jakarta.validation.ConstraintValidatorContext;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Payload;
 import jakarta.validation.Valid;
+import jakarta.validation.Validator;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraintvalidation.SupportedValidationTarget;
+import jakarta.validation.constraintvalidation.ValidationTarget;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -329,6 +332,111 @@ class ValidationExceptionHandlerIT {
                 .andExpect(jsonPath("$.violations[0].path").value("$"))
                 .andExpect(jsonPath("$.violations[0].message").value("min must not exceed max"))
                 .andExpect(jsonPath("$.violations[0].invalidValue").doesNotExist());
+    }
+
+    // --- object-level constraints never echo the object ---
+
+    @Test
+    void nestedClassLevelConstraintOnBody_reportsPropertyPathWithoutInvalidValue() throws Exception {
+        mvc.perform(post("/test/constraint-violation/box")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"range\":{\"min\":5,\"max\":1}}"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.violations.length()").value(1))
+                .andExpect(jsonPath("$.violations[0].path").value("$.range"))
+                .andExpect(jsonPath("$.violations[0].invalidValue").doesNotHaveJsonPath());
+    }
+
+    @Test
+    void nestedClassLevelConstraintWithMethodValidation_reportsPropertyPathWithoutInvalidValue() throws Exception {
+        mvc.perform(post("/test/constraint-violation/box-mixed").param("page", "0")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"range\":{\"min\":5,\"max\":1}}"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.violations.length()").value(2))
+                .andExpect(jsonPath("$.violations[?(@.path=='$.range')]").exists())
+                .andExpect(jsonPath("$.violations[?(@.path=='$.range')].invalidValue").isEmpty())
+                .andExpect(jsonPath("$.violations[?(@.path=='$.page')].invalidValue", hasItem("0")));
+    }
+
+    @Test
+    void crossParameterConstraintAlongsideParameterConstraint_reportsRootPathWithoutInvalidValue() throws Exception {
+        mvc.perform(post("/test/constraint-violation/cross-mixed")
+                        .param("min", "5").param("max", "1").param("page", "0"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.violations.length()").value(2))
+                .andExpect(jsonPath("$.violations[?(@.path=='$')]").exists())
+                .andExpect(jsonPath("$.violations[?(@.path=='$')].invalidValue").isEmpty())
+                .andExpect(jsonPath("$.violations[?(@.path=='$.page')]").exists());
+    }
+
+    // Spring only raises an exception when a parameter has a violation. Documented in the README.
+    @Test
+    void crossParameterConstraintAlone_isNotEnforcedOnController() throws Exception {
+        mvc.perform(post("/test/constraint-violation/cross-mixed")
+                        .param("min", "5").param("max", "1").param("page", "1"))
+                .andDo(print())
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void classLevelConstraintOnServiceParameter_reportsRootPathWithoutInvalidValue() throws Exception {
+        mvc.perform(post("/test/constraint-violation/service-range"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.violations.length()").value(1))
+                .andExpect(jsonPath("$.violations[0].path").value("$"))
+                .andExpect(jsonPath("$.violations[0].message").value("min must not exceed max"))
+                .andExpect(jsonPath("$.violations[0].invalidValue").doesNotHaveJsonPath());
+    }
+
+    @Test
+    void nestedClassLevelConstraintOnServiceParameter_reportsPropertyPathWithoutInvalidValue() throws Exception {
+        mvc.perform(post("/test/constraint-violation/service-box"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.violations[0].path").value("$.range"))
+                .andExpect(jsonPath("$.violations[0].invalidValue").doesNotHaveJsonPath());
+    }
+
+    @Test
+    void classLevelConstraintOnServiceContainerElement_reportsIndexedPathWithoutInvalidValue() throws Exception {
+        mvc.perform(post("/test/constraint-violation/service-ranges"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.violations[0].path").value("$[1]"))
+                .andExpect(jsonPath("$.violations[0].invalidValue").doesNotHaveJsonPath());
+    }
+
+    @Test
+    void crossParameterConstraintOnService_reportsRootPathWithoutInvalidValue() throws Exception {
+        mvc.perform(post("/test/constraint-violation/service-cross"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.violations.length()").value(1))
+                .andExpect(jsonPath("$.violations[0].path").value("$"))
+                .andExpect(jsonPath("$.violations[0].message").value("arguments out of order"))
+                .andExpect(jsonPath("$.violations[0].invalidValue").doesNotHaveJsonPath());
+    }
+
+    @Test
+    void classLevelConstraintFromDirectValidatorCall_reportsRootPathWithoutInvalidValue() throws Exception {
+        mvc.perform(post("/test/constraint-violation/direct-range"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.violations[0].path").value("$"))
+                .andExpect(jsonPath("$.violations[0].invalidValue").doesNotHaveJsonPath());
+    }
+
+    @Test
+    void constraintMessageParameter_isResolvedFromApplicationMessageSource() throws Exception {
+        mvc.perform(post("/test/constraint-violation/bundle-message"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.violations[0].message").value("Widget not found"));
     }
 
     @Test
@@ -758,8 +866,9 @@ class ValidationExceptionHandlerIT {
         }
 
         @Bean
-        ConstraintViolationTriggerController constraintViolationTriggerController(ValidatedService service) {
-            return new ConstraintViolationTriggerController(service);
+        ConstraintViolationTriggerController constraintViolationTriggerController(ValidatedService service,
+                                                                                  Validator validator) {
+            return new ConstraintViolationTriggerController(service, validator);
         }
     }
 
@@ -775,6 +884,22 @@ class ValidationExceptionHandlerIT {
         void requireNonBlankItems(List<@NotBlank String> items) {
         }
 
+        void requireValidRange(@Valid Range range) {
+        }
+
+        void requireBundleMessage(@NotBlank(message = "{test.widget-not-found}") String value) {
+        }
+
+        void requireValidBox(@Valid Box box) {
+        }
+
+        void requireValidRanges(List<@Valid Range> ranges) {
+        }
+
+        @ArgumentsInOrder
+        void requireOrdered(int min, int max) {
+        }
+
         @NotNull
         String brokenLookup() {
             return null;
@@ -782,6 +907,28 @@ class ValidationExceptionHandlerIT {
     }
 
     record Named(@NotBlank String name) {
+    }
+
+    record Box(@Valid Range range) {
+    }
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @Constraint(validatedBy = ArgumentsInOrderValidator.class)
+    @interface ArgumentsInOrder {
+        String message() default "arguments out of order";
+
+        Class<?>[] groups() default {};
+
+        Class<? extends Payload>[] payload() default {};
+    }
+
+    @SupportedValidationTarget(ValidationTarget.PARAMETERS)
+    public static class ArgumentsInOrderValidator implements ConstraintValidator<ArgumentsInOrder, Object[]> {
+        @Override
+        public boolean isValid(Object[] arguments, ConstraintValidatorContext context) {
+            return (int) arguments[0] <= (int) arguments[1];
+        }
     }
 
     @Target(ElementType.TYPE)
@@ -811,9 +958,54 @@ class ValidationExceptionHandlerIT {
     static class ConstraintViolationTriggerController {
 
         private final ValidatedService service;
+        private final Validator validator;
 
-        ConstraintViolationTriggerController(ValidatedService service) {
+        ConstraintViolationTriggerController(ValidatedService service, Validator validator) {
             this.service = service;
+            this.validator = validator;
+        }
+
+        @PostMapping("/box")
+        void box(@RequestBody @Valid Box box) {
+        }
+
+        @PostMapping("/box-mixed")
+        void boxMixed(@RequestBody @Valid Box box, @RequestParam @Min(1) int page) {
+        }
+
+        @ArgumentsInOrder
+        @PostMapping("/cross-mixed")
+        void crossMixed(@RequestParam int min, @RequestParam int max, @RequestParam @Min(1) int page) {
+        }
+
+        @PostMapping("/bundle-message")
+        void bundleMessage() {
+            service.requireBundleMessage("");
+        }
+
+        @PostMapping("/service-range")
+        void serviceRange() {
+            service.requireValidRange(new Range(5, 1));
+        }
+
+        @PostMapping("/service-box")
+        void serviceBox() {
+            service.requireValidBox(new Box(new Range(5, 1)));
+        }
+
+        @PostMapping("/service-ranges")
+        void serviceRanges() {
+            service.requireValidRanges(List.of(new Range(1, 5), new Range(5, 1)));
+        }
+
+        @PostMapping("/service-cross")
+        void serviceCross() {
+            service.requireOrdered(5, 1);
+        }
+
+        @PostMapping("/direct-range")
+        void directRange() {
+            throw new ConstraintViolationException(validator.validate(new Range(5, 1)));
         }
 
         // @Validated service method called with a blank arg → ConstraintViolationException →

@@ -9,7 +9,6 @@ import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
-import org.springframework.validation.FieldError;
 import org.springframework.validation.method.MethodValidationException;
 import org.springframework.validation.method.MethodValidationResult;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -72,10 +71,7 @@ public class ValidationExceptionHandler {
     public ResponseEntity<ProblemDetail> handleMethodArgumentNotValid(
             MethodArgumentNotValidException ex) {
         var violations = ex.getBindingResult().getAllErrors().stream()
-                .map(error -> error instanceof FieldError fe
-                        ? Violations.of("$." + fe.getField(), fe.getRejectedValue(), fe.getDefaultMessage())
-                        // An object-level constraint applies to the request body as a whole.
-                        : Violations.withoutValue("$", error.getDefaultMessage()))
+                .map(error -> Violations.of("$", error))
                 .toList();
 
         log.debug("{} {}: Validation failed with {} violation(s)",
