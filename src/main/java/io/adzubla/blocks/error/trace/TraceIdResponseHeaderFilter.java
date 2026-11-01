@@ -35,8 +35,8 @@ import java.util.Set;
  * <p>Because the decision depends on the status, the response is wrapped and the header is added
  * lazily, while headers can still be written: when the status is set via {@code setStatus} or
  * {@code sendError}, when the body stream or writer is first obtained, on {@code flushBuffer}, and
- * once the chain returns. A header already added cannot be taken back, so a status changed after the
- * body has started is not reconsidered.
+ * once the chain returns. An exception escaping the chain counts as a 500. A header already added
+ * cannot be taken back, so a status changed afterwards is not reconsidered.
  *
  * <p>If there is no unique {@link io.micrometer.tracing.Tracer} bean, or no active span, the filter
  * delegates without setting the header. {@code ErrorTraceAutoConfiguration} registers it only when
@@ -75,11 +75,14 @@ public class TraceIdResponseHeaderFilter extends OncePerRequestFilter {
         var wrapper = new TraceIdResponse(response, span.context().traceId());
         try {
             filterChain.doFilter(request, wrapper);
-        } finally {
-            // Covers responses that set no status and write no body (an implicit, empty 200), and
-            // requests that went async, whose later writes bypass this wrapper.
-            wrapper.addIfApplicable(wrapper.getStatus());
+        } catch (Throwable ex) {
+            // Still status 200 here: the container only turns it into a 500 further up.
+            wrapper.addIfApplicable(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            throw ex;
         }
+        // Covers responses that set no status and write no body (an implicit, empty 200), and
+        // requests that went async, whose later writes bypass this wrapper.
+        wrapper.addIfApplicable(wrapper.getStatus());
     }
 
     private boolean applies(int status) {
