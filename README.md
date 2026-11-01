@@ -85,7 +85,7 @@ Errors handled by Spring MVC look like this, plus the extra fields described in 
 }
 ```
 
-`code` is the stable field to branch on (see the [error code reference](#9-error-code-reference)).
+`code` is the stable field to branch on (see the [guide for API consumers](#9-guide-for-api-consumers)).
 `title` and `detail` are for people and can be [translated or reworded](#8-internationalisation-i18n).
 
 Two kinds of error don't use this format: the 401/403 responses written by
@@ -487,40 +487,155 @@ jakarta.validation.constraints.NotBlank.message=não pode estar em branco
 jakarta.validation.constraints.Size.message=o tamanho deve estar entre {min} e {max}
 ```
 
-## 9 Error code reference
+## 9 Guide for API consumers
 
-| `code`                            | Status | Meaning                                                                      |
-|-----------------------------------|--------|------------------------------------------------------------------------------|
-| `MALFORMED_JSON`                  | 400    | Syntactically invalid JSON                                                   |
-| `MALFORMED_REQUEST_BODY`          | 400    | Body unreadable (unclassified, or missing)                                   |
-| `UNKNOWN_JSON_FIELD`              | 400    | Field not declared on the target type, or ignored                            |
-| `INVALID_ENUM_VALUE`              | 400    | Value not in enum constants                                                  |
-| `INVALID_FIELD_VALUE`             | 400    | Value cannot be converted to the target type                                 |
-| `TYPE_MISMATCH`                   | 400    | Wrong JSON token type for target                                             |
-| `NULL_VALUE_NOT_ALLOWED`          | 400    | `null` sent for a field that forbids it                                      |
-| `INVALID_TYPE_ID`                 | 400    | Unknown polymorphic type id                                                  |
-| `INVALID_PROPERTY_REFERENCE`      | 400    | Unknown property in a Spring Data `Sort` (e.g. `?sort=nope`)                 |
-| `INTEGER_OVERFLOW`                | 400    | Numeric value outside type range                                             |
-| `VALIDATION_FAILED`               | 422    | Bean Validation constraint failure                                           |
-| `METHOD_VALIDATION_ERROR`         | 500    | Method validation failure, only when `blocks.error.validation.enabled=false` |
-| `DUPLICATE_VALUE`                 | 409    | Unique constraint violated                                                   |
-| `REFERENTIAL_INTEGRITY_VIOLATION` | 409    | Foreign key constraint violated                                              |
-| `DATA_INTEGRITY_VIOLATION`        | 409    | Other integrity constraint violated                                          |
-| `OPTIMISTIC_LOCKING_FAILURE`      | 409    | Resource modified by another request                                         |
-| `RESOURCE_NOT_FOUND`              | 404    | Entity or query result not found                                             |
-| `METHOD_NOT_ALLOWED`              | 405    | HTTP method not supported                                                    |
-| `UNSUPPORTED_MEDIA_TYPE`          | 415    | `Content-Type` not accepted                                                  |
-| `NOT_ACCEPTABLE`                  | 406    | Requested `Accept` type unavailable                                          |
-| `MISSING_PATH_VARIABLE`           | 500    | Path variable declared on the handler but absent from the mapping            |
-| `MISSING_REQUEST_PARAMETER`       | 400    | Required query parameter absent                                              |
-| `MISSING_REQUEST_PART`            | 400    | Required multipart part absent                                               |
-| `REQUEST_BINDING_ERROR`           | 400    | Other request binding failure (e.g. missing header or cookie)                |
-| `ROUTE_NOT_FOUND`                 | 404    | No handler or static resource for the request path                           |
-| `REQUEST_TIMEOUT`                 | 503    | Async request timed out                                                      |
-| `PAYLOAD_TOO_LARGE`               | 413    | Upload exceeds configured limit                                              |
-| `MALFORMED_MULTIPART_REQUEST`     | 400    | Multipart body unparsable, or request not multipart                          |
-| `CONVERSION_NOT_SUPPORTED`        | 500    | No converter for property type                                               |
-| `PARAMETER_TYPE_MISMATCH`         | 400    | Query/path parameter type coercion failed                                    |
-| `MESSAGE_NOT_WRITABLE`            | 500    | Response body could not be serialised                                        |
-| `ERROR_RESPONSE`                  | varies | Exception with a declared status (see section 3.6)                           |
-| `INTERNAL_SERVER_ERROR`           | 500    | Unexpected exception, or a constraint violation on a return value            |
+The subsections below are written for your API's clients, so you can copy them into its documentation.
+
+### 9.1 Error response shape
+
+Errors follow [RFC 9457 Problem Details](https://www.rfc-editor.org/rfc/rfc9457) and are sent with
+`Content-Type: application/problem+json`:
+
+```json
+{
+  "title": "Invalid enum value",
+  "status": 400,
+  "detail": "Cannot deserialize value 'UNKNOWN' as Category at path $.category — valid values: [ELECTRONICS, BOOKS, CLOTHING]",
+  "instance": "/products",
+  "code": "INVALID_ENUM_VALUE",
+  "path": "$.category",
+  "invalidValue": "UNKNOWN",
+  "expectedType": "Category",
+  "validValues": ["ELECTRONICS", "BOOKS", "CLOTHING"],
+  "traceId": "69fcf2db21f488679d633abb34871dbb"
+}
+```
+
+These fields are part of every error, except where marked optional:
+
+| Field      | Type   | Presence | Description                                                 |
+|------------|--------|----------|-------------------------------------------------------------|
+| `code`     | string | Always   | Stable identifier of the error. Use this field in your code |
+| `status`   | number | Always   | HTTP status, same as the response status                    |
+| `title`    | string | Always   | Short summary for people. May be translated                 |
+| `detail`   | string | Optional | Explanation for people. May be translated                   |
+| `instance` | string | Always   | Path of the request                                         |
+| `traceId`  | string | Optional | ID to quote when reporting a problem                        |
+
+These fields are all optional, and appear only for some codes (see [Error codes](#93-error-codes)):
+
+| Field          | Type             | Presence | Description                                                   |
+|----------------|------------------|----------|---------------------------------------------------------------|
+| `path`         | string           | Optional | JSONPath of the field in the request, e.g. `$.address.street` |
+| `invalidValue` | string           | Optional | The rejected value. Always a string, e.g. `"-1"`              |
+| `expectedType` | string           | Optional | Name of the type the API expected                             |
+| `validValues`  | array of strings | Optional | The accepted values, or the known field names                 |
+| `validRange`   | string           | Optional | The accepted numeric range, e.g. `[-2147483648, 2147483647]`  |
+| `line`         | number           | Optional | Line of the problem in the request body                       |
+| `column`       | number           | Optional | Column of the problem in the request body                     |
+| `violations`   | array of objects | Optional | Every validation failure in the request (see below)           |
+
+Each `violations` entry has:
+
+| Field          | Type           | Presence | Description                                                                                      |
+|----------------|----------------|----------|--------------------------------------------------------------------------------------------------|
+| `path`         | string         | Always   | Location in the request: a body field, or a query or path parameter. `$` means the whole request |
+| `invalidValue` | string or null | Optional | The rejected value, `null` if the value was null, and absent if no single value was at fault     |
+| `message`      | string         | Always   | Why the value was rejected. May be translated                                                    |
+
+```json
+{
+  "title": "Validation failed",
+  "status": 422,
+  "detail": "One or more fields failed validation",
+  "instance": "/products",
+  "code": "VALIDATION_FAILED",
+  "violations": [
+    { "path": "$.name", "invalidValue": "", "message": "must not be blank" },
+    { "path": "$.price", "invalidValue": "-1", "message": "must be greater than 0" }
+  ],
+  "traceId": "69fcf2db21f488679d633abb34871dbb"
+}
+```
+
+### 9.2 Handling errors
+
+- **Use `code` in your logic, not the text.** `title`, `detail` and `message` can change and depend on the
+  language. Send `Accept-Language` to ask for a language; English is used if it isn't available.
+- **Expect new codes.** An API can add its own codes, so fall back to the HTTP status for a code you don't
+  recognise.
+- **Don't assume every error has this body.** 401 and 403 responses can have an empty body, and some other
+  errors can use another format. Check that the `Content-Type` is `application/problem+json` before parsing.
+- **Quote the trace ID when reporting a problem.** Use `traceId` from the body, or the `X-Trace-Id` response
+  header. The header can also appear on successful responses, and is usually absent from 401 and 403.
+
+### 9.3 Error codes
+
+Extra fields are included when the API has the information, so treat them as optional even for a code
+that lists them.
+
+**Request body.** Fix the request before sending it again.
+
+| Situation                                       | `code`                   | Status | Extra fields                                          |
+|-------------------------------------------------|--------------------------|--------|-------------------------------------------------------|
+| The body isn't valid JSON                       | `MALFORMED_JSON`         | 400    | `line`, `column`                                      |
+| The body is missing or can't be read            | `MALFORMED_REQUEST_BODY` | 400    | none                                                  |
+| The body has a field the API doesn't accept     | `UNKNOWN_JSON_FIELD`     | 400    | `path`, `validValues`                                 |
+| A value isn't one of the accepted values        | `INVALID_ENUM_VALUE`     | 400    | `path`, `invalidValue`, `expectedType`, `validValues` |
+| A value can't be converted to the expected type | `INVALID_FIELD_VALUE`    | 400    | `path`, `invalidValue`, `expectedType`                |
+| A value has the wrong JSON type                 | `TYPE_MISMATCH`          | 400    | `path`, `expectedType`                                |
+| A field that can't be null is null              | `NULL_VALUE_NOT_ALLOWED` | 400    | `path`                                                |
+| The type name of an object is unknown           | `INVALID_TYPE_ID`        | 400    | `path`, `invalidValue`, `expectedType`                |
+| A number is too large or small for its type     | `INTEGER_OVERFLOW`       | 400    | `expectedType`, `validRange`, `line`, `column`        |
+
+**Validation.** Fix every entry in `violations` before sending the request again.
+
+| Situation                      | `code`              | Status | Extra fields |
+|--------------------------------|---------------------|--------|--------------|
+| One or more values are invalid | `VALIDATION_FAILED` | 422    | `violations` |
+
+**Request format.** Fix the request before sending it again.
+
+| Situation                                                     | `code`                        | Status | Extra fields   |
+|---------------------------------------------------------------|-------------------------------|--------|----------------|
+| No such route                                                 | `ROUTE_NOT_FOUND`             | 404    | none           |
+| The route doesn't support this HTTP method                    | `METHOD_NOT_ALLOWED`          | 405    | none           |
+| The API can't produce the type asked for in `Accept`          | `NOT_ACCEPTABLE`              | 406    | none           |
+| The API doesn't accept this `Content-Type`                    | `UNSUPPORTED_MEDIA_TYPE`      | 415    | none           |
+| A required query parameter is missing                         | `MISSING_REQUEST_PARAMETER`   | 400    | none           |
+| A query or path parameter has the wrong type                  | `PARAMETER_TYPE_MISMATCH`     | 400    | none           |
+| The request can't be bound, e.g. a required header is missing | `REQUEST_BINDING_ERROR`       | 400    | none           |
+| The sort parameter names an unknown property                  | `INVALID_PROPERTY_REFERENCE`  | 400    | `invalidValue` |
+| A required part of a multipart request is missing             | `MISSING_REQUEST_PART`        | 400    | none           |
+| The multipart request can't be read, or isn't multipart       | `MALFORMED_MULTIPART_REQUEST` | 400    | none           |
+| The upload is too large                                       | `PAYLOAD_TOO_LARGE`           | 413    | none           |
+
+**Resource state.** The request is well formed, but conflicts with the data the API holds. Reload the
+resource and try again after `OPTIMISTIC_LOCKING_FAILURE`; otherwise, change the request.
+
+| Situation                                            | `code`                            | Status | Extra fields   |
+|------------------------------------------------------|-----------------------------------|--------|----------------|
+| The resource doesn't exist                           | `RESOURCE_NOT_FOUND`              | 404    | none           |
+| A resource with the same value already exists        | `DUPLICATE_VALUE`                 | 409    | `invalidValue` |
+| The request references a resource that doesn't exist | `REFERENTIAL_INTEGRITY_VIOLATION` | 409    | `invalidValue` |
+| The resource is still referenced by other resources  | `REFERENTIAL_INTEGRITY_VIOLATION` | 409    | `invalidValue` |
+| The change breaks another data rule                  | `DATA_INTEGRITY_VIOLATION`        | 409    | none           |
+| Another request changed the resource first           | `OPTIMISTIC_LOCKING_FAILURE`      | 409    | none           |
+
+**Server errors.** The request may be fine, and resending it unchanged may not help. Report the problem with
+the trace ID, except for `REQUEST_TIMEOUT`, which you can retry later.
+
+| Situation                                 | `code`                     | Status | Extra fields |
+|-------------------------------------------|----------------------------|--------|--------------|
+| An unexpected error occurred              | `INTERNAL_SERVER_ERROR`    | 500    | none         |
+| The API can't process this route          | `MISSING_PATH_VARIABLE`    | 500    | none         |
+| The API can't convert a value it received | `CONVERSION_NOT_SUPPORTED` | 500    | none         |
+| The API can't write the response          | `MESSAGE_NOT_WRITABLE`     | 500    | none         |
+| The API failed to validate the request    | `METHOD_VALIDATION_ERROR`  | 500    | none         |
+| The request took too long to process      | `REQUEST_TIMEOUT`          | 503    | none         |
+
+**API-specific errors.** The status and meaning depend on the endpoint, so see its documentation.
+
+| Situation                              | `code`           | Status | Extra fields |
+|----------------------------------------|------------------|--------|--------------|
+| An error raised by the API's own logic | `ERROR_RESPONSE` | varies | none         |
