@@ -2,6 +2,7 @@ package io.adzubla.blocks.error.trace;
 
 import io.micrometer.tracing.Tracer;
 import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletOutputStream;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -12,6 +13,8 @@ import org.springframework.core.annotation.Order;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.util.Set;
 
 /**
  * Servlet filter that adds an {@value #HEADER_NAME} response header to HTTP responses.
@@ -23,13 +26,17 @@ import java.io.IOException;
  * filters produce themselves (a 401/403, a CORS rejection) and not only those that get as far as
  * the servlet.
  *
- * <p>By default the header is added to every response, success and error alike, and is written
- * <em>before</em> delegating further so it is always present regardless of whether a downstream
- * handler commits the response early. When {@link TraceIdHeaderProperties#isErrorOnly()} is
- * {@code true} the header is only added to error responses (status 400+). Since the response body
- * (and therefore the commit) usually follows immediately after the status is set, the response is
- * wrapped so the header is added at the moment an error status is set via {@code setStatus} or
- * {@code sendError} — while headers can still be written.
+ * <p>By default the header is added to every response, success and error alike, except those
+ * whose status is listed in {@link TraceIdHeaderProperties#getExcludeStatuses()} (401 and 403 by
+ * default, so the responses of Spring Security's authentication and authorization failures don't
+ * carry it). When {@link TraceIdHeaderProperties#isErrorOnly()} is {@code true} the header is only
+ * added to error responses (status 400+).
+ *
+ * <p>Because the decision depends on the status, the response is wrapped and the header is added
+ * lazily, while headers can still be written: when the status is set via {@code setStatus} or
+ * {@code sendError}, when the body stream or writer is first obtained, on {@code flushBuffer}, and
+ * once the chain returns. A header already added cannot be taken back, so a status changed after the
+ * body has started is not reconsidered.
  *
  * <p>If the {@link io.micrometer.tracing.Tracer} bean is absent the filter delegates without
  * setting the header, making the Micrometer Tracing bean itself optional at runtime. However, the
@@ -47,10 +54,12 @@ public class TraceIdResponseHeaderFilter extends OncePerRequestFilter {
 
     private final ObjectProvider<Tracer> tracerProvider;
     private final boolean errorOnly;
+    private final Set<Integer> excludedStatuses;
 
     public TraceIdResponseHeaderFilter(ObjectProvider<Tracer> tracerProvider, TraceIdHeaderProperties properties) {
         this.tracerProvider = tracerProvider;
         this.errorOnly = properties.isErrorOnly();
+        this.excludedStatuses = Set.copyOf(properties.getExcludeStatuses());
     }
 
     @Override
@@ -65,46 +74,71 @@ public class TraceIdResponseHeaderFilter extends OncePerRequestFilter {
             return;
         }
 
-        var traceId = span.context().traceId();
-        if (errorOnly) {
-            filterChain.doFilter(request, new ErrorOnlyTraceIdResponse(response, traceId));
-        } else {
-            response.setHeader(HEADER_NAME, traceId);
-            filterChain.doFilter(request, response);
+        var wrapper = new TraceIdResponse(response, span.context().traceId());
+        try {
+            filterChain.doFilter(request, wrapper);
+        } finally {
+            // Covers responses that set no status and write no body (an implicit, empty 200), and
+            // requests that went async, whose later writes bypass this wrapper.
+            wrapper.addIfApplicable(wrapper.getStatus());
         }
     }
 
-    // Adds the trace ID header as soon as an error status is set, before the body commits the response.
-    private static final class ErrorOnlyTraceIdResponse extends HttpServletResponseWrapper {
+    private boolean applies(int status) {
+        return (!errorOnly || status >= 400) && !excludedStatuses.contains(status);
+    }
+
+    // Adds the trace ID header once the status is known and before the response commits.
+    private final class TraceIdResponse extends HttpServletResponseWrapper {
 
         private final String traceId;
+        private boolean added;
 
-        ErrorOnlyTraceIdResponse(HttpServletResponse response, String traceId) {
+        TraceIdResponse(HttpServletResponse response, String traceId) {
             super(response);
             this.traceId = traceId;
         }
 
         @Override
         public void setStatus(int sc) {
-            addTraceIdIfError(sc);
+            addIfApplicable(sc);
             super.setStatus(sc);
         }
 
         @Override
         public void sendError(int sc) throws IOException {
-            addTraceIdIfError(sc);
+            addIfApplicable(sc);
             super.sendError(sc);
         }
 
         @Override
         public void sendError(int sc, String msg) throws IOException {
-            addTraceIdIfError(sc);
+            addIfApplicable(sc);
             super.sendError(sc, msg);
         }
 
-        private void addTraceIdIfError(int sc) {
-            if (sc >= 400 && !isCommitted()) {
+        @Override
+        public ServletOutputStream getOutputStream() throws IOException {
+            addIfApplicable(getStatus());
+            return super.getOutputStream();
+        }
+
+        @Override
+        public PrintWriter getWriter() throws IOException {
+            addIfApplicable(getStatus());
+            return super.getWriter();
+        }
+
+        @Override
+        public void flushBuffer() throws IOException {
+            addIfApplicable(getStatus());
+            super.flushBuffer();
+        }
+
+        void addIfApplicable(int status) {
+            if (!added && !isCommitted() && applies(status)) {
                 setHeader(HEADER_NAME, traceId);
+                added = true;
             }
         }
     }

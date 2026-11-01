@@ -331,7 +331,8 @@ Two kinds of exception are exempt from the catch-all:
   one matches) as `detail`.
 - **Spring Security's `AccessDeniedException` / `AuthenticationException`** (e.g. thrown by
   `@PreAuthorize`) are rethrown, so Spring Security's `ExceptionTranslationFilter` produces its
-  usual 401/403 response. Spring Security stays an optional dependency.
+  usual 401/403 response. Spring Security stays an optional dependency. See
+  [Behaviour with Spring Security](#36-behaviour-with-spring-security).
 
 ### 3.5 Trace ID — `ProblemDetailTraceAdvice` and `TraceIdResponseHeaderFilter`
 
@@ -343,13 +344,49 @@ the sampling probability does not affect whether the ID appears in responses.
   `@ExceptionHandler`. Normal responses are not touched.
 - `TraceIdResponseHeaderFilter` sets an `X-Trace-Id: <hex>` header on every response, success and
   error alike — or only on error responses (status 400+) with
-  `blocks.error.trace.header.error-only=true`. It runs at `Ordered.HIGHEST_PRECEDENCE + 2`, right
-  after the `ServerHttpObservationFilter` that starts the span, so the header also reaches
-  responses produced by filters that answer the request themselves (a Spring Security 401/403, a
-  CORS rejection).
+  `blocks.error.trace.header.error-only=true` — except responses whose status is listed in
+  `blocks.error.trace.header.exclude-statuses`, which defaults to `401,403` (see
+  [Tracing](#42-tracing)). It runs at `Ordered.HIGHEST_PRECEDENCE + 2`, right after the
+  `ServerHttpObservationFilter` that starts the span, so the header also reaches responses
+  produced by filters that answer the request themselves (a CORS rejection, a rate limiter).
 
 Errors raised outside Spring MVC (e.g. in a servlet filter) are rendered by Spring Boot's error
 controller, so they get neither a `code` nor a `traceId` body field.
+
+### 3.6 Behaviour with Spring Security
+
+The library works alongside Spring Security without depending on it, but the two split the
+responsibility for error responses, and it helps to know where the line falls
+(covered by `SpringSecurityIT`, which runs the real filter chain):
+
+| Situation | Who answers | Response |
+|-----------|-------------|----------|
+| Unauthenticated or unauthorised request rejected by the filter chain (`authorizeHttpRequests`, `httpBasic`, …) | Spring Security | Its own 401 / 403: **empty body, no `code`, no `traceId` field, and no `X-Trace-Id` header** (401 and 403 are excluded by default) |
+| `@PreAuthorize` / `@Secured` denial, or an `AuthenticationException`, thrown from a controller or service | Spring Security — the library rethrows it to `ExceptionTranslationFilter` | The same 401 / 403 as above, not a 500 |
+| Unknown route that your rules require authentication for | Spring Security | 401 for anonymous callers; the library's 404 `ROUTE_NOT_FOUND` only appears for routes Security lets through |
+| Everything else, for callers Security lets through | This library | The usual Problem Details body, with `code` and `traceId` |
+
+Things to be aware of:
+
+- **Security's 401/403 are not Problem Details.** They are written by servlet filters, outside Spring
+  MVC, so no `@ExceptionHandler` runs. A client that expects this library's error format on every
+  error must handle an empty 401/403 body. To get Problem Details there too, give
+  `HttpSecurity` an `AuthenticationEntryPoint` and `AccessDeniedHandler` of your own (the library
+  does not provide them).
+- **No trace ID on 401/403.** `TraceIdResponseHeaderFilter` skips the statuses in
+  `blocks.error.trace.header.exclude-statuses` (default `401,403`), so callers who are not
+  authenticated, or not authorised, are not handed a trace ID. This applies to every 401/403 the
+  application sends, whoever produced it; such an error from this library's own handlers still
+  carries `traceId` in its Problem Details body. Set the property to empty to send the header on
+  those responses too (see [Tracing](#42-tracing)).
+- **Only a top-level Security exception is rethrown.** If another exception wraps an
+  `AccessDeniedException` or `AuthenticationException` before it reaches `GlobalExceptionHandler`,
+  the catch-all treats it as unexpected and answers 500. Unwrap it, or handle it with your own
+  `@ExceptionHandler`.
+- Errors that Spring Boot routes through its `/error` page (for example failures raised inside
+  filters) are subject to your Security rules like any other request; `/error` must be permitted for
+  those to reach anonymous callers as the real error rather than a 401. Errors this library handles
+  never use `/error`.
 
 ## 4 Configuration
 
@@ -384,6 +421,11 @@ management.tracing.sampling.probability=1.0
 
 # Only add the X-Trace-Id response header to error responses (status 400+). Defaults to false.
 blocks.error.trace.header.error-only=true
+
+# Statuses whose responses do not get the X-Trace-Id header. Defaults to 401,403, so Spring
+# Security's authentication and authorization failures don't expose a trace ID. Set it empty to
+# add the header regardless of status.
+blocks.error.trace.header.exclude-statuses=401,403
 ```
 
 To stop exposing trace IDs without removing the tracing dependencies, use

@@ -25,8 +25,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
- * A filter that answers the request itself, standing in for Spring Security (401/403), CORS or
- * rate-limit filters, must not escape the trace ID header.
+ * A filter that answers the request itself, standing in for a rate-limit or CORS filter (Spring
+ * Security's 401/403 are excluded by default, see {@link TraceIdExcludedStatusesIT}), must not escape the trace ID header.
  */
 @SpringBootTest(classes = DemoApplication.class)
 @AutoConfigureMockMvc
@@ -40,7 +40,7 @@ class TraceIdHeaderOrderIT {
     void responseProducedByAnEarlyFilter_hasTraceIdHeader() throws Exception {
         mvc.perform(get("/test/early-filter/denied"))
                 .andDo(print())
-                .andExpect(status().isUnauthorized())
+                .andExpect(status().isTooManyRequests())
                 .andExpect(header().exists("X-Trace-Id"));
     }
 
@@ -65,7 +65,7 @@ class TraceIdHeaderOrderIT {
         protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                         FilterChain chain) throws ServletException, IOException {
             if (request.getRequestURI().startsWith("/test/early-filter/")) {
-                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.setStatus(429);
                 return;
             }
             chain.doFilter(request, response);

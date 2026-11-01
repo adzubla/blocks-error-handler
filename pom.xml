@@ -116,11 +116,22 @@
             <artifactId>spring-boot-starter-webmvc-test</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- Test-only: lets GlobalExceptionHandlerIT verify Spring Security exceptions are rethrown
-             rather than turned into a 500. Core only, so no web security auto-configuration. -->
+        <!-- Test-only: lets the integration tests verify behaviour under Spring Security. Deliberately
+             not spring-boot-starter-security, so Boot's web security auto-configuration stays off for
+             the other tests; SpringSecurityIT enables the filter chain explicitly. -->
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-web</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-config</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
