@@ -41,7 +41,8 @@ import java.util.Set;
  * {@code void create(@Valid Request request)} reports {@code $.name}, while
  * {@code void find(@NotBlank String code)} reports {@code $.code} and
  * {@code void tag(List<@NotBlank String> tags)} reports {@code $.tags[0]}. {@code invalidValue}
- * follows the convention in {@link Violations}, so a complex value is never echoed.
+ * follows the convention in {@link Violations}, so a complex value or sensitive field is never
+ * echoed.
  *
  * <p>A violation on a method's <em>return value</em> means the server produced invalid data, not
  * that the client sent it, so it is answered like any unexpected error: HTTP 500
@@ -54,9 +55,11 @@ public class ConstraintViolationExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(ConstraintViolationExceptionHandler.class);
 
     private final ErrorMessages messages;
+    private final Violations violationMapper;
 
-    public ConstraintViolationExceptionHandler(MessageSource messageSource) {
+    public ConstraintViolationExceptionHandler(MessageSource messageSource, ValidationExceptionProperties properties) {
         this.messages = new ErrorMessages(messageSource);
+        this.violationMapper = new Violations(properties.getSensitiveFields());
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
@@ -68,7 +71,7 @@ public class ConstraintViolationExceptionHandler {
             return returnValueViolation(ex);
         }
         var violations = constraintViolations.stream()
-                .map(violation -> Violations.of(jsonPath(violation.getPropertyPath()),
+                .map(violation -> violationMapper.of(jsonPath(violation.getPropertyPath()),
                         violation.getInvalidValue(), violation.getMessage()))
                 // By message too, so several violations on one path come out in a stable order.
                 .sorted(Comparator.<Map<String, String>, String>comparing(v -> v.get("path"))

@@ -9,6 +9,7 @@ import jakarta.validation.Payload;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import jakarta.validation.constraintvalidation.SupportedValidationTarget;
 import jakarta.validation.constraintvalidation.ValidationTarget;
 import org.junit.jupiter.api.Test;
@@ -94,6 +95,15 @@ class MethodValidationExceptionHandlerIT {
                 .andExpect(jsonPath("$.violations[0].invalidValue").doesNotHaveJsonPath());
     }
 
+    @Test
+    void sensitiveParameter_omitsInvalidValue() throws Exception {
+        mvc.perform(post("/test/method-validation/secret"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.violations[0].path").value("$.clientSecret"))
+                .andExpect(jsonPath("$.violations[0].invalidValue").doesNotHaveJsonPath());
+    }
+
     // Spring only raises an exception when a parameter has a violation. Documented in the README.
     @Test
     void crossParameterConstraintAlone_isNotEnforced() throws Exception {
@@ -153,6 +163,9 @@ class MethodValidationExceptionHandlerIT {
     static class MethodValidatedService {
 
         void requireValidBox(@Valid Box box) {
+        }
+
+        void requireLongSecret(@Size(min = 8) String clientSecret) {
         }
 
         @AlwaysInvalidParameters
@@ -216,6 +229,11 @@ class MethodValidationExceptionHandlerIT {
         @PostMapping("/return-value")
         void returnValue() {
             service.brokenLookup();
+        }
+
+        @PostMapping("/secret")
+        void secret() {
+            service.requireLongSecret("hunter2");
         }
 
         @PostMapping("/box")

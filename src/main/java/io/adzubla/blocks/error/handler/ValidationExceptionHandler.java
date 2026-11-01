@@ -46,8 +46,9 @@ import java.util.Map;
  *   <li>{@code path} — JSONPath notation (e.g. {@code $.address.street}); {@code $} for a
  *       constraint on the request object as a whole
  *   <li>{@code invalidValue} — a simple value serialised as string; JSON {@code null} when the
- *       value is {@code null}; absent for a complex value such as a collection or an object, and for
- *       an object-level or cross-parameter constraint
+ *       value is {@code null}; absent for a complex value such as a collection or an object, for
+ *       an object-level or cross-parameter constraint, and for a sensitive field (see
+ *       {@link ValidationExceptionProperties})
  *   <li>{@code message} — the constraint violation message
  * </ul>
  *
@@ -62,16 +63,18 @@ public class ValidationExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(ValidationExceptionHandler.class);
 
     private final ErrorMessages messages;
+    private final Violations violationMapper;
 
-    public ValidationExceptionHandler(MessageSource messageSource) {
+    public ValidationExceptionHandler(MessageSource messageSource, ValidationExceptionProperties properties) {
         this.messages = new ErrorMessages(messageSource);
+        this.violationMapper = new Violations(properties.getSensitiveFields());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ProblemDetail> handleMethodArgumentNotValid(
             MethodArgumentNotValidException ex) {
         var violations = ex.getBindingResult().getAllErrors().stream()
-                .map(error -> Violations.of("$", error))
+                .map(error -> violationMapper.of("$", error))
                 .toList();
 
         log.debug("{} {}: Validation failed with {} violation(s)",
@@ -100,7 +103,7 @@ public class ValidationExceptionHandler {
         if (forReturnValue) {
             return returnValueViolation(ex);
         }
-        var violations = Violations.of(result);
+        var violations = violationMapper.of(result);
         log.debug("{} {}: Method validation failed with {} violation(s)",
                 HttpStatus.UNPROCESSABLE_CONTENT.value(), ErrorCode.VALIDATION_FAILED, violations.size());
         log.trace("Stack trace:", ex);

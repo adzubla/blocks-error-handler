@@ -8,6 +8,7 @@ import io.adzubla.blocks.error.handler.JpaExceptionHandler;
 import io.adzubla.blocks.error.handler.JsonExceptionHandler;
 import io.adzubla.blocks.error.handler.SpringDataExceptionHandler;
 import io.adzubla.blocks.error.handler.ValidationExceptionHandler;
+import io.adzubla.blocks.error.handler.ValidationExceptionProperties;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
@@ -40,6 +41,7 @@ import tools.jackson.databind.json.JsonMapper;
 @AutoConfiguration(beforeName = "org.springframework.boot.webmvc.autoconfigure.WebMvcAutoConfiguration")
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnBooleanProperty(name = "blocks.error.enabled", matchIfMissing = true)
+@EnableConfigurationProperties(ValidationExceptionProperties.class)
 public class ErrorHandlerAutoConfiguration {
 
     @Bean
@@ -53,8 +55,9 @@ public class ErrorHandlerAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnBooleanProperty(name = "blocks.error.validation.enabled", matchIfMissing = true)
-    ValidationExceptionHandler validationExceptionHandler(MessageSource messageSource) {
-        return new ValidationExceptionHandler(messageSource);
+    ValidationExceptionHandler validationExceptionHandler(MessageSource messageSource,
+                                                          ValidationExceptionProperties properties) {
+        return new ValidationExceptionHandler(messageSource, properties);
     }
 
     @Bean
@@ -101,8 +104,9 @@ public class ErrorHandlerAutoConfiguration {
         @Bean
         @ConditionalOnMissingBean
         @ConditionalOnBooleanProperty(name = "blocks.error.constraint-violation.enabled", matchIfMissing = true)
-        ConstraintViolationExceptionHandler constraintViolationExceptionHandler(MessageSource messageSource) {
-            return new ConstraintViolationExceptionHandler(messageSource);
+        ConstraintViolationExceptionHandler constraintViolationExceptionHandler(
+                MessageSource messageSource, ValidationExceptionProperties properties) {
+            return new ConstraintViolationExceptionHandler(messageSource, properties);
         }
     }
 

@@ -194,6 +194,18 @@ Each violation has:
 Paths from a service layer are best-effort: a service can't know how its parameters map to the
 request, so it assumes the validated object is the request body.
 
+**Sensitive fields.** `invalidValue` is also absent when the `path` contains one of these words, ignoring
+case, `-` and `_`, so `$.newPassword`, `$.client_secret` and `$.credentials.pin` are all covered. Setting
+the property replaces the defaults, and leaving it empty returns every simple value:
+
+```properties
+blocks.error.validation.sensitive-fields=password,passwd,pwd,secret,token,apikey,privatekey,credential
+```
+
+This only applies to `violations`. A JSON error can still echo a value that couldn't be converted, such as
+a malformed `UUID` in `$.token`, and a database error can echo a stored value (see
+[Data access errors](#34-data-access-errors)).
+
 **Cross-parameter constraints may not run on their own.** On a controller, or on a service with
 `adapt-constraint-violations=true`, Spring only raises an exception when a parameter also has a violation.
 If the cross-parameter constraint is the only failure, the method runs as if the input were valid. Don't
@@ -415,6 +427,9 @@ separately at `TRACE`:
 logging.level.io.adzubla.blocks.error.handler.JsonExceptionHandler=TRACE
 logging.level.io.adzubla.blocks.error.handler.ValidationExceptionHandler=TRACE
 ```
+
+These traces can include rejected values, even for [sensitive fields](#33-validation-errors), so avoid `TRACE`
+in production.
 
 Spring MVC also logs a `WARN` for every 405 under its `PageNotFound` category. To avoid logging them twice:
 
@@ -692,7 +707,7 @@ Each `violations` entry has:
 | Field          | Type           | Presence | Description                                                                                      |
 |----------------|----------------|----------|--------------------------------------------------------------------------------------------------|
 | `path`         | string         | Always   | Location in the request: a body field, or a query or path parameter. `$` means the whole request |
-| `invalidValue` | string or null | Optional | The rejected value, `null` if the value was null, and absent for a list or object                |
+| `invalidValue` | string or null | Optional | The rejected value, `null` if the value was null, and absent for a list, object or secret        |
 | `message`      | string         | Always   | Why the value was rejected. May be translated                                                    |
 
 ```json

@@ -432,6 +432,60 @@ class ValidationExceptionHandlerIT {
                 .andExpect(jsonPath("$.violations[0].invalidValue").doesNotHaveJsonPath());
     }
 
+    // --- sensitive fields never echo the value ---
+
+    @Test
+    void sensitiveBodyField_omitsInvalidValueButOtherFieldsKeepIt() throws Exception {
+        mvc.perform(post("/test/constraint-violation/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"hunter2\",\"name\":\"toolong\"}"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(content().string(Matchers.not(containsString("hunter2"))))
+                .andExpect(jsonPath("$.violations.length()").value(2))
+                .andExpect(jsonPath("$.violations[?(@.path=='$.password')]").exists())
+                .andExpect(jsonPath("$.violations[?(@.path=='$.password')].invalidValue").isEmpty())
+                .andExpect(jsonPath("$.violations[?(@.path=='$.name')].invalidValue", hasItem("toolong")));
+    }
+
+    @Test
+    void sensitiveBodyFieldWithMethodValidation_omitsInvalidValue() throws Exception {
+        mvc.perform(post("/test/constraint-violation/login-mixed").param("page", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"hunter2\",\"name\":\"ok\"}"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(content().string(Matchers.not(containsString("hunter2"))))
+                .andExpect(jsonPath("$.violations[0].path").value("$.password"));
+    }
+
+    @Test
+    void sensitiveControllerParameter_omitsInvalidValue() throws Exception {
+        mvc.perform(get("/test/constraint-violation/access").param("accessToken", "hunter2"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(content().string(Matchers.not(containsString("hunter2"))))
+                .andExpect(jsonPath("$.violations[0].path").value("$.accessToken"));
+    }
+
+    @Test
+    void sensitiveServiceField_omitsInvalidValue() throws Exception {
+        mvc.perform(post("/test/constraint-violation/service-login"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(content().string(Matchers.not(containsString("hunter2"))))
+                .andExpect(jsonPath("$.violations[0].path").value("$.password"));
+    }
+
+    @Test
+    void sensitiveServiceParameter_omitsInvalidValue() throws Exception {
+        mvc.perform(post("/test/constraint-violation/service-api-key"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(content().string(Matchers.not(containsString("hunter2"))))
+                .andExpect(jsonPath("$.violations[0].path").value("$.apiKey"));
+    }
+
     // --- field-level constraints on complex values never echo the value ---
 
     @Test
@@ -950,6 +1004,12 @@ class ValidationExceptionHandlerIT {
         void requireValidBasket(@Valid Basket basket) {
         }
 
+        void requireValidLogin(@Valid Login login) {
+        }
+
+        void requireLongApiKey(@Size(min = 8) String apiKey) {
+        }
+
         void requireBundleMessage(@NotBlank(message = "{test.widget-not-found}") String value) {
         }
 
@@ -976,6 +1036,9 @@ class ValidationExceptionHandlerIT {
     }
 
     record Item(String secret) {
+    }
+
+    record Login(@Size(min = 8) String password, @Size(max = 2) String name) {
     }
 
     record Basket(@NotNull @Size(max = 1) List<Item> items) {
@@ -1045,6 +1108,29 @@ class ValidationExceptionHandlerIT {
         @ArgumentsInOrder
         @PostMapping("/cross-mixed")
         void crossMixed(@RequestParam int min, @RequestParam int max, @RequestParam @Min(1) int page) {
+        }
+
+        @PostMapping("/login")
+        void login(@RequestBody @Valid Login login) {
+        }
+
+        // A constraint on another parameter turns @Valid on the body into method validation.
+        @PostMapping("/login-mixed")
+        void loginMixed(@RequestBody @Valid Login login, @RequestParam @Min(1) int page) {
+        }
+
+        @GetMapping("/access")
+        void access(@RequestParam @Size(min = 8) String accessToken) {
+        }
+
+        @PostMapping("/service-login")
+        void serviceLogin() {
+            service.requireValidLogin(new Login("hunter2", "ok"));
+        }
+
+        @PostMapping("/service-api-key")
+        void serviceApiKey() {
+            service.requireLongApiKey("hunter2");
         }
 
         @PostMapping("/basket")
