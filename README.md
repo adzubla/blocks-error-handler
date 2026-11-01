@@ -34,7 +34,7 @@ This library replaces that with a single, consistent error contract:
 
 | Dependency                                                                                                  | Notes                                                                                                      |
 |-------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------|
-| Spring Boot 4.x                                                                                             | Tested on 4.0.7                                                                                            |
+| Spring Boot 4.x                                                                                             | Tested on 4.0.9                                                                                            |
 | `spring-boot-starter-webmvc`                                                                                | Required — servlet web applications only                                                                   |
 | `spring-boot-starter-validation`                                                                            | Optional — a Bean Validation provider, needed for any `VALIDATION_FAILED` response; also enables `ConstraintViolationExceptionHandler` |
 | `spring-tx` (via `spring-boot-starter-jdbc`, `spring-boot-starter-data-jpa`, any Spring Data starter, …)    | Optional — enables `DataExceptionHandler`                                                                  |
