@@ -549,6 +549,60 @@ class JsonExceptionHandlerIT {
     }
 
     @Test
+    void nullForPrimitive_returnsTypeMismatch() throws Exception {
+        mvc.perform(post("/test/json/primitive")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"count\":null}"))
+                .andDo(print())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("TYPE_MISMATCH"))
+                .andExpect(jsonPath("$.path").value("$.count"))
+                .andExpect(jsonPath("$.expectedType").value("int"));
+    }
+
+    @Test
+    void absentPrimitive_returnsTypeMismatch() throws Exception {
+        mvc.perform(post("/test/json/primitive")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andDo(print())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("TYPE_MISMATCH"))
+                .andExpect(jsonPath("$.path").value("$.count"));
+    }
+
+    @Test
+    void blankBody_returnsTypeMismatchAtRoot() throws Exception {
+        mvc.perform(post("/test/json/primitive")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("   "))
+                .andDo(print())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("TYPE_MISMATCH"))
+                .andExpect(jsonPath("$.path").value("$"));
+    }
+
+    @Test
+    void severalJsonValues_returnTypeMismatchAtRoot() throws Exception {
+        mvc.perform(post("/test/json/primitive")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"count\":1} {\"count\":2}"))
+                .andDo(print())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("TYPE_MISMATCH"))
+                .andExpect(jsonPath("$.path").value("$"));
+    }
+
+    @Test
+    void emptyBody_returnsMalformedRequestBody() throws Exception {
+        mvc.perform(post("/test/json/primitive")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andDo(print())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("MALFORMED_REQUEST_BODY"));
+    }
+
+    @Test
     void unknownPolymorphicTypeId_returnsInvalidTypeId() throws Exception {
         mvc.perform(post("/test/json/animal")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -603,6 +657,9 @@ class JsonExceptionHandlerIT {
                           String name) {
     }
 
+    record PrimitiveRequest(int count) {
+    }
+
     @com.fasterxml.jackson.annotation.JsonTypeInfo(use = com.fasterxml.jackson.annotation.JsonTypeInfo.Id.NAME, property = "type")
     @com.fasterxml.jackson.annotation.JsonSubTypes(@com.fasterxml.jackson.annotation.JsonSubTypes.Type(value = Dog.class, name = "dog"))
     interface Animal {
@@ -639,6 +696,10 @@ class JsonExceptionHandlerIT {
 
         @PostMapping("/test/json/non-null")
         void nonNull(@RequestBody NonNullRequest request) {
+        }
+
+        @PostMapping("/test/json/primitive")
+        void primitive(@RequestBody PrimitiveRequest request) {
         }
 
         @PostMapping("/test/json/animal")

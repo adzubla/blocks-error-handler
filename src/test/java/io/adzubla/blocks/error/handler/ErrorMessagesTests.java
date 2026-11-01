@@ -38,6 +38,14 @@ class ErrorMessagesTests {
     }
 
     @Test
+    void portugueseWithoutBrazil_getsEnglish() {
+        LocaleContextHolder.setLocale(new Locale("pt"));
+        assertThat(messages.get("error.internal.title")).isEqualTo("Internal server error");
+        LocaleContextHolder.setLocale(new Locale("pt", "PT"));
+        assertThat(messages.get("error.internal.title")).isEqualTo("Internal server error");
+    }
+
+    @Test
     void englishRequestLocale_onNonEnglishHost_getsEnglish() {
         LocaleContextHolder.setLocale(Locale.ENGLISH);
         assertThat(messages.get("error.internal.title")).isEqualTo("Internal server error");

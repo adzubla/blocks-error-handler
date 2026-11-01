@@ -89,8 +89,9 @@ Errors handled by Spring MVC look like this, plus the extra fields described in 
 `title` and `detail` are for people and can be [translated or reworded](#8-internationalisation-i18n).
 
 Two kinds of error don't use this format: the 401/403 responses written by
-[Spring Security](#5-spring-security), and errors raised outside Spring MVC, such as in a servlet
-filter, which Spring Boot's error controller renders.
+[Spring Security](#5-spring-security), and errors that don't reach an `@ExceptionHandler`, such as an
+exception in a servlet filter or a call to `response.sendError`, which Spring Boot's error controller
+renders.
 
 ### 3.2 JSON request body errors
 
@@ -105,10 +106,12 @@ the cause of an `HttpMessageNotReadableException`.
 | Value can't be converted to the field's type             | `InvalidFormatException`                                        | `INVALID_FIELD_VALUE`    | 400    | `path`, `invalidValue`, `expectedType`                |
 | The target type's constructor rejects the value          | `ValueInstantiationException`                                   | `INVALID_FIELD_VALUE`    | 400    | `path`, `expectedType`                                |
 | Wrong JSON token, e.g. an object for a string            | `MismatchedInputException`                                      | `TYPE_MISMATCH`          | 400    | `path`, `expectedType`                                |
-| `null` for a field that forbids it                       | `InvalidNullException`                                          | `NULL_VALUE_NOT_ALLOWED` | 400    | `path`                                                |
+| `null` or no value for a primitive such as `int`         | `MismatchedInputException`                                      | `TYPE_MISMATCH`          | 400    | `path`, `expectedType`                                |
+| A blank body, or several JSON values in one body         | `MismatchedInputException`                                      | `TYPE_MISMATCH`          | 400    | `path` (`$`), `expectedType`                          |
+| `null` with `@JsonSetter(nulls = Nulls.FAIL)`            | `InvalidNullException`                                          | `NULL_VALUE_NOT_ALLOWED` | 400    | `path`                                                |
 | Unknown polymorphic type id                              | `InvalidTypeIdException`                                        | `INVALID_TYPE_ID`        | 400    | `path`, `invalidValue`, `expectedType`                |
 | Number outside the range of its integer type             | `InputCoercionException`                                        | `INTEGER_OVERFLOW`       | 400    | `expectedType`, `validRange`, `line`, `column`        |
-| Anything else, e.g. a missing body                       | `HttpMessageNotReadableException` with any other cause, or none | `MALFORMED_REQUEST_BODY` | 400    | none                                                  |
+| Anything else, e.g. an empty body                        | `HttpMessageNotReadableException` with any other cause, or none | `MALFORMED_REQUEST_BODY` | 400    | none                                                  |
 | Server-side defect: abstract type with no known subtypes | `InvalidDefinitionException`                                    | `INTERNAL_SERVER_ERROR`  | 500    | none                                                  |
 | Server-side defect: missing injectable value             | `MissingInjectableValueException`                               | `INTERNAL_SERVER_ERROR`  | 500    | none                                                  |
 
@@ -323,17 +326,18 @@ request is rejected:
 
 | Situation                                                                     | Who answers     | Response                                                                                   |
 |-------------------------------------------------------------------------------|-----------------|--------------------------------------------------------------------------------------------|
-| Rejected by the filter chain (`authorizeHttpRequests`, `httpBasic`, …)        | Spring Security | Its own 401 / 403: empty body, no `code`, no `traceId`, no `X-Trace-Id` header             |
+| Rejected by the filter chain (`authorizeHttpRequests`, `httpBasic`, …)        | Spring Security | Its own 401 / 403: no `code`, no `traceId`, no `X-Trace-Id` header                         |
 | `@PreAuthorize` / `@Secured` denial or `AuthenticationException` in your code | Spring Security | The same 401 / 403, not a 500                                                              |
 | Unknown route that your rules require authentication for                      | Spring Security | 401 for anonymous callers. `ROUTE_NOT_FOUND` only appears for routes Security lets through |
 | Everything else, for callers Security lets through                            | This library    | The usual Problem Details body                                                             |
 
 Things to be aware of:
 
-- **Security's 401/403 are not Problem Details.** Clients must handle an empty 401/403 body. To get
-  Problem Details there too, give `HttpSecurity` your own `AuthenticationEntryPoint` and
-  `AccessDeniedHandler`; the library doesn't provide them.
-- **The trace ID exclusion applies to every 401/403**, whoever produced it. A 401/403 answered by an
+- **Security's 401/403 are not Problem Details.** The body is empty if `/error` isn't permitted, and Spring
+  Boot's JSON error body (`status`, `error`, `path`) if it is. To get Problem Details there too, give
+  `HttpSecurity` your own `AuthenticationEntryPoint` and `AccessDeniedHandler`; the library doesn't provide
+  them.
+- **The trace ID exclusion applies to 401/403 responses**, whoever produced them. A 401/403 answered by an
   `@ExceptionHandler` has no header but still has `traceId` in its body. See [Trace ID](#4-trace-id) to
   change the excluded statuses.
 - **A wrapped Security exception is a 500.** If another exception wraps an `AccessDeniedException` or
@@ -341,7 +345,8 @@ Things to be aware of:
   `@ExceptionHandler`.
 - **`/error` must be permitted.** Errors that Spring Boot routes through `/error`, such as failures
   raised inside filters, are subject to your Security rules. Anonymous callers get a 401 instead of the
-  real error unless `/error` is permitted. Errors this library handles don't use `/error`.
+  real error unless `/error` is permitted, and that 401 does have the `X-Trace-Id` header. Errors this
+  library handles don't use `/error`.
 
 ## 6 Disabling or replacing handlers
 
@@ -420,6 +425,7 @@ logging.level.org.springframework.web.servlet.PageNotFound=ERROR
 ## 8 Internationalisation (i18n)
 
 The library's `title` and `detail` text ships in English (the fallback) and Brazilian Portuguese (`pt_BR`).
+Only `pt-BR` gets Portuguese: `pt` and `pt-PT` get English.
 
 ### 8.1 Overriding messages and adding a locale
 
@@ -447,7 +453,7 @@ in your `MessageSource` under `problemDetail.title.<exception class>` and `probl
 ### 8.2 Locale resolution
 
 The locale comes from the `Accept-Language` header by default. To use a cookie or session instead, declare a
-`LocaleResolver` bean.
+`LocaleResolver` bean named `localeResolver`. A bean with another name is ignored.
 
 A header naming a locale with no translation (e.g. `fr`) gets the library's English text, not its text for the
 server's JVM locale. Your own bundle behaves differently: by default, Spring Boot falls back to the JVM locale
@@ -555,9 +561,10 @@ class BusinessExceptionHandler {
     ResponseEntity<ProblemDetail> handle(BusinessException ex) {
         var locale = LocaleContextHolder.getLocale();
         var key = "error." + ex.getCode().toLowerCase(Locale.ROOT).replace('_', '-');
-        var detail = messageSource.getMessage(key + ".detail", ex.getArgs(), ex.getMessage(), locale);
+        // Not ex.getMessage() as the default: with arguments, it would lose its apostrophes to MessageFormat.
+        var detail = messageSource.getMessage(key + ".detail", ex.getArgs(), null, locale);
 
-        var problem = ProblemDetail.forStatusAndDetail(ex.getStatus(), detail);
+        var problem = ProblemDetail.forStatusAndDetail(ex.getStatus(), detail != null ? detail : ex.getMessage());
         problem.setTitle(messageSource.getMessage(key + ".title", null, ex.getStatus().getReasonPhrase(), locale));
         problem.setProperty("code", ex.getCode());
         return ResponseEntity.status(ex.getStatus()).body(problem);
@@ -709,8 +716,8 @@ Each `violations` entry has:
   language. Send `Accept-Language` to ask for a language; the API uses a default language if it isn't available.
 - **Expect new codes.** An API can add its own codes, so fall back to the HTTP status for a code you don't
   recognise.
-- **Don't assume every error has this body.** 401 and 403 responses can have an empty body, and some other
-  errors can use another format. Check that the `Content-Type` is `application/problem+json` before parsing.
+- **Don't assume every error has this body.** 401 and 403 responses can be empty or use another format, and
+  so can some other errors. Check that the `Content-Type` is `application/problem+json` before parsing.
 - **Quote the trace ID when reporting a problem.** Use `traceId` from the body, or the `X-Trace-Id` response
   header. The header can also appear on successful responses, and is usually absent from 401 and 403.
 
@@ -724,11 +731,13 @@ that lists them.
 | Situation                                       | `code`                   | Status | Extra fields                                          |
 |-------------------------------------------------|--------------------------|--------|-------------------------------------------------------|
 | The body isn't valid JSON                       | `MALFORMED_JSON`         | 400    | `line`, `column`                                      |
-| The body is missing or can't be read            | `MALFORMED_REQUEST_BODY` | 400    | none                                                  |
+| The body is empty or can't be read              | `MALFORMED_REQUEST_BODY` | 400    | none                                                  |
+| The body is blank, or has several JSON values   | `TYPE_MISMATCH`          | 400    | `path`, `expectedType`                                |
 | The body has a field the API doesn't accept     | `UNKNOWN_JSON_FIELD`     | 400    | `path`, `validValues`                                 |
 | A value isn't one of the accepted values        | `INVALID_ENUM_VALUE`     | 400    | `path`, `invalidValue`, `expectedType`, `validValues` |
 | A value can't be converted to the expected type | `INVALID_FIELD_VALUE`    | 400    | `path`, `invalidValue`, `expectedType`                |
 | A value has the wrong JSON type                 | `TYPE_MISMATCH`          | 400    | `path`, `expectedType`                                |
+| A required number or boolean is null or missing | `TYPE_MISMATCH`          | 400    | `path`, `expectedType`                                |
 | A field that can't be null is null              | `NULL_VALUE_NOT_ALLOWED` | 400    | `path`                                                |
 | The type name of an object is unknown           | `INVALID_TYPE_ID`        | 400    | `path`, `invalidValue`, `expectedType`                |
 | A number is too large or small for its type     | `INTEGER_OVERFLOW`       | 400    | `expectedType`, `validRange`, `line`, `column`        |
