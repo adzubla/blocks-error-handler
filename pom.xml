@@ -35,14 +35,21 @@
     </dependencyManagement>
 
     <dependencies>
-        <!-- Optional: required only for JpaExceptionHandler, which is gated behind
-             @ConditionalOnClass(EntityNotFoundException.class). Consumers not using JPA don't pull
-             this in. -->
+        <!-- Web -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
+        </dependency>
+
+        <!-- Optional: required only for JpaExceptionHandler, DataExceptionHandler and
+             SpringDataExceptionHandler, each gated behind @ConditionalOnClass. Consumers not using
+             JPA / Spring Data don't pull this in. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
             <optional>true</optional>
         </dependency>
+
         <!-- Optional: required only for ConstraintViolationExceptionHandler, which is gated behind
              @ConditionalOnClass(ConstraintViolationException.class). Consumers not using Bean
              Validation don't pull this in. -->
@@ -51,27 +58,13 @@
             <artifactId>spring-boot-starter-validation</artifactId>
             <optional>true</optional>
         </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-webmvc</artifactId>
-        </dependency>
-        <!-- Optional: actuator + tracing bring the Tracer bean that ProblemDetailTraceAdvice and
-             TraceIdResponseHeaderFilter consume; both are gated behind
-             @ConditionalOnClass(Tracer.class). Consumers not using Micrometer Tracing don't pull
-             this in. -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-actuator</artifactId>
-            <optional>true</optional>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-micrometer-tracing-brave</artifactId>
-            <optional>true</optional>
-        </dependency>
+
+        <!-- Optional: the only tracing API the library's code touches (Tracer). ProblemDetailTraceAdvice
+             and TraceIdResponseHeaderFilter are gated behind @ConditionalOnClass(Tracer.class).
+             Consumers bring their own tracing bridge. -->
         <dependency>
             <groupId>io.micrometer</groupId>
-            <artifactId>micrometer-tracing-bridge-brave</artifactId>
+            <artifactId>micrometer-tracing</artifactId>
             <optional>true</optional>
         </dependency>
 
@@ -83,9 +76,26 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- Test-only: this library's own code never touches JDBC/DataSource APIs. jdbc is needed
-             here solely to give the integration tests (Testcontainers-backed Postgres) a real
-             connection pool (HikariCP); consumers get their own via whatever starter they choose. -->
+        <!-- Test: Spring Boot test starters -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Test: database. This library's own code never touches JDBC/DataSource APIs. jdbc gives the
+             integration tests a real connection pool (HikariCP) and DataSource auto-configuration; they
+             run against a Testcontainers Postgres. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
@@ -97,28 +107,42 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-jpa-test</artifactId>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-jdbc-test</artifactId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Test: tracing runtime. Actuator + Brave bridge provide the observation filter and the real
+             Tracer bean that the trace integration tests exercise. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-validation-test</artifactId>
+            <artifactId>spring-boot-micrometer-tracing-brave</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-webmvc-test</artifactId>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-brave</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- Test-only: lets the integration tests verify behaviour under Spring Security. Deliberately
-             not spring-boot-starter-security, so Boot's web security auto-configuration stays off for
-             the other tests; SpringSecurityIT enables the filter chain explicitly. -->
+
+        <!-- Test: Spring Security. Deliberately not spring-boot-starter-security, so Boot's web security
+             auto-configuration stays off for the other tests; SpringSecurityIT enables the filter chain
+             explicitly. -->
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-core</artifactId>
@@ -132,21 +156,6 @@
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-config</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-testcontainers</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>testcontainers-junit-jupiter</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>testcontainers-postgresql</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
