@@ -203,8 +203,8 @@ blocks.error.validation.sensitive-fields=password,passwd,pwd,secret,token,apikey
 ```
 
 This only applies to `violations`. A JSON error can still echo a value that couldn't be converted, such as
-a malformed `UUID` in `$.token`, and a database error can echo a stored value (see
-[Data access errors](#34-data-access-errors)).
+a malformed `UUID` in `$.token`, and so can the `detail` of `PARAMETER_TYPE_MISMATCH` for a query or path
+parameter. A database error can echo a stored value (see [Data access errors](#34-data-access-errors)).
 
 **Cross-parameter constraints may not run on their own.** On a controller, or on a service with
 `adapt-constraint-violations=true`, Spring only raises an exception when a parameter also has a violation.
@@ -301,7 +301,7 @@ spring.servlet.multipart.max-request-size=50MB
 
 ## 4 Trace ID
 
-When Micrometer Tracing is on the classpath:
+When tracing is set up as in [Installation](#22-installation):
 
 - Problem Details bodies from `@ExceptionHandler` methods get `"traceId": "<hex>"`.
 - Responses get an `X-Trace-Id: <hex>` header, success and error alike, including responses written by
@@ -417,8 +417,12 @@ who is at fault:
 | `SpringDataExceptionHandler`          | `DEBUG`                                                                                    |
 | `GlobalExceptionHandler`              | `WARN` for 4xx; `ERROR` with stack trace for 5xx and unexpected exceptions                 |
 
-`DataExceptionHandler`'s integrity violation logs include the raw database message, which may contain the
-rejected values.
+Some logs can contain rejected values, whatever the [sensitive fields](#33-validation-errors) setting:
+
+- `DataExceptionHandler`'s integrity violation logs include the raw database message.
+- `GlobalExceptionHandler`'s `WARN` logs include the exception message, such as the value of a query
+  parameter of the wrong type.
+- `JsonExceptionHandler`'s `DEBUG` logs include Jackson's message.
 
 Client errors are logged as a one-line summary. For JSON and validation errors, the stack trace is logged
 separately at `TRACE`:
@@ -440,7 +444,7 @@ logging.level.org.springframework.web.servlet.PageNotFound=ERROR
 ## 8 Internationalisation (i18n)
 
 The library's `title` and `detail` text ships in English (the fallback) and Brazilian Portuguese (`pt_BR`).
-Only `pt-BR` gets Portuguese: `pt` and `pt-PT` get English.
+`Accept-Language: pt-BR` gets Portuguese, while `pt` and `pt-PT` get English.
 
 ### 8.1 Overriding messages and adding a locale
 
@@ -637,8 +641,9 @@ Your handlers run before the library's catch-all, with no `@Order` needed. There
 - **Log by fault.** Log client errors as a one-line summary at `DEBUG` or `WARN`, and server faults at `ERROR`
   with the stack trace. The library doesn't log exceptions your handler takes.
 - **Reuse the library's extra fields.** Use `path`, `invalidValue`, `validValues` and `violations` with the
-  same meaning they have elsewhere. A business rule on a field can use the validation format, so clients
-  handle both the same way:
+  same meaning they have elsewhere, but leave sensitive values out yourself: the
+  [sensitive fields](#33-validation-errors) setting doesn't apply to your handlers. A business rule on a field
+  can use the validation format, so clients handle both the same way:
 
   ```java
   var status = HttpStatus.UNPROCESSABLE_CONTENT;
