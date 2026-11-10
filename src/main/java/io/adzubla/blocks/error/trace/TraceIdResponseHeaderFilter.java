@@ -36,7 +36,8 @@ import java.util.Set;
  * lazily, while headers can still be written: when the status is set via {@code setStatus} or
  * {@code sendError}, when the body stream or writer is first obtained, on {@code flushBuffer}, and
  * once the chain returns. An exception escaping the chain counts as a 500. A header already added
- * cannot be taken back, so a status changed afterwards is not reconsidered.
+ * cannot be taken back, so a status changed afterwards is not reconsidered. A request that went
+ * async is not decided when the chain returns, as its status is only known once it completes.
  *
  * <p>If there is no unique {@link io.micrometer.tracing.Tracer} bean, or no active span, the filter
  * delegates without setting the header. {@code ErrorTraceAutoConfiguration} registers it only when
@@ -80,9 +81,20 @@ public class TraceIdResponseHeaderFilter extends OncePerRequestFilter {
             wrapper.addIfApplicable(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
             throw ex;
         }
-        // Covers responses that set no status and write no body (an implicit, empty 200), and
-        // requests that went async, whose later writes bypass this wrapper.
+        if (finishesThroughWrapper(request)) {
+            // An async request has no final status yet: the wrapper decides when the status is set
+            // or the body is written, from the thread that completes it.
+            return;
+        }
+        // Covers responses that set no status and write no body (an implicit, empty 200), and async
+        // requests started on the original response, whose later writes bypass this wrapper.
         wrapper.addIfApplicable(wrapper.getStatus());
+    }
+
+    // True for async processing started with this filter's wrapper (as Spring MVC does for Callable,
+    // DeferredResult and the like), false for a no-arg startAsync(), which uses the unwrapped response.
+    private static boolean finishesThroughWrapper(HttpServletRequest request) {
+        return request.isAsyncStarted() && !request.getAsyncContext().hasOriginalRequestAndResponse();
     }
 
     private boolean applies(int status) {
@@ -93,7 +105,8 @@ public class TraceIdResponseHeaderFilter extends OncePerRequestFilter {
     private final class TraceIdResponse extends HttpServletResponseWrapper {
 
         private final String traceId;
-        private boolean added;
+        // Volatile: an async request is completed from another thread.
+        private volatile boolean added;
 
         TraceIdResponse(HttpServletResponse response, String traceId) {
             super(response);
