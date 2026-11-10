@@ -52,9 +52,13 @@ these dependencies in, so add the ones you need:
 | Data access errors                | `spring-tx`, which comes with `spring-boot-starter-jdbc` or any data starter |
 | JPA errors                        | `spring-boot-starter-data-jpa`, or any other source of `jakarta.persistence` |
 | Unknown Spring Data sort property | Any Spring Data starter                                                      |
-| Trace ID in bodies and headers    | `spring-boot-micrometer-tracing-brave` + `micrometer-tracing-bridge-brave`   |
+| Trace ID in bodies and headers    | A Micrometer Tracing bridge: Brave or OpenTelemetry (see below)              |
 
-Tracing is tested with the Brave bridge, and doesn't need `spring-boot-starter-actuator`:
+Tracing works with either Micrometer Tracing bridge, because the library only uses Micrometer's
+`Tracer`. Add the pair for the one your application uses, not both. Neither needs
+`spring-boot-starter-actuator`.
+
+With Brave:
 
 ```xml
 <dependency>
@@ -66,6 +70,22 @@ Tracing is tested with the Brave bridge, and doesn't need `spring-boot-starter-a
     <artifactId>micrometer-tracing-bridge-brave</artifactId>
 </dependency>
 ```
+
+With OpenTelemetry:
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-micrometer-tracing-opentelemetry</artifactId>
+</dependency>
+<dependency>
+    <groupId>io.micrometer</groupId>
+    <artifactId>micrometer-tracing-bridge-otel</artifactId>
+</dependency>
+```
+
+The build runs the tests with the Brave bridge. The same tests have also been run, and pass, with
+the OpenTelemetry bridge.
 
 ## 3 Error responses
 
@@ -344,9 +364,9 @@ blocks.error.trace.body.enabled=false
 blocks.error.trace.header.enabled=false
 ```
 
-**Sampling.** With Brave, every request gets a trace ID, including those that aren't sampled, so
-responses carry the ID regardless of the sampling probability. An unsampled ID won't be found in your
-tracing backend, though. To look up every request in development:
+**Sampling.** With both Brave and OpenTelemetry, every request gets a trace ID, including those
+that aren't sampled, so responses carry the ID regardless of the sampling probability. An unsampled
+ID won't be found in your tracing backend, though. To look up every request in development:
 
 ```properties
 # Fraction of requests exported to the tracing backend (0.0–1.0). Defaults to 0.1.
