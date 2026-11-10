@@ -140,19 +140,19 @@ The 500 responses are logged at `ERROR`.
 `expectedType` names the type as an OpenAPI schema would, followed by the format in parentheses when there
 is one, never the Java class:
 
-| Field type in Java                                  | `expectedType`                           |
-|-----------------------------------------------------|------------------------------------------|
-| `boolean`                                           | `boolean`                                |
-| `int`, `long`                                       | `integer (int32)`, `integer (int64)`     |
-| `short`, `byte`, `BigInteger`                       | `integer`                                |
-| `float`, `double`                                   | `number (float)`, `number (double)`      |
-| `BigDecimal`                                        | `number`                                 |
-| `LocalDate`                                         | `string (date)`                          |
-| `Instant`, `OffsetDateTime`, `LocalDateTime`, `Date` | `string (date-time)`                     |
-| `UUID`, `URI`                                       | `string (uuid)`, `string (uri)`          |
-| `String`, an enum, and other simple values          | `string`                                 |
-| A collection or array                               | `array`                                  |
-| Anything else                                       | `object`                                 |
+| Field type in Java                                   | `expectedType`                       |
+|------------------------------------------------------|--------------------------------------|
+| `boolean`                                            | `boolean`                            |
+| `int`, `long`                                        | `integer (int32)`, `integer (int64)` |
+| `short`, `byte`, `BigInteger`                        | `integer`                            |
+| `float`, `double`                                    | `number (float)`, `number (double)`  |
+| `BigDecimal`                                         | `number`                             |
+| `LocalDate`                                          | `string (date)`                      |
+| `Instant`, `OffsetDateTime`, `LocalDateTime`, `Date` | `string (date-time)`                 |
+| `UUID`, `URI`                                        | `string (uuid)`, `string (uri)`      |
+| `String`, an enum, and other simple values           | `string`                             |
+| A collection or array                                | `array`                              |
+| Anything else                                        | `object`                             |
 
 For enums, `validValues` lists each constant the way your `JsonMapper` writes it, so `@JsonProperty`
 and `@JsonValue` names are listed rather than the Java constant names.
@@ -308,28 +308,30 @@ a missing one and for a row that others still reference.
 
 ### 3.5 Spring MVC and unexpected errors
 
-| Situation                                                                                                         | Exception                                                                         | `code`                        | Status | Extra fields |
-|-------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------|-------------------------------|--------|--------------|
-| HTTP method not supported                                                                                         | `HttpRequestMethodNotSupportedException`                                          | `METHOD_NOT_ALLOWED`          | 405    | none         |
-| `Content-Type` not accepted                                                                                       | `HttpMediaTypeNotSupportedException`                                              | `UNSUPPORTED_MEDIA_TYPE`      | 415    | none         |
-| Requested `Accept` type unavailable                                                                               | `HttpMediaTypeNotAcceptableException`                                             | `NOT_ACCEPTABLE`              | 406    | none         |
-| No handler or static resource for the path                                                                        | `NoResourceFoundException`, `NoHandlerFoundException`                             | `ROUTE_NOT_FOUND`             | 404    | none         |
-| Required query parameter absent                                                                                   | `MissingServletRequestParameterException`                                         | `MISSING_REQUEST_PARAMETER`   | 400    | `path`, `expectedType`         |
-| Required multipart part absent                                                                                    | `MissingServletRequestPartException`                                              | `MISSING_REQUEST_PART`        | 400    | none         |
-| Other binding failure, e.g. missing header or cookie                                                              | `ServletRequestBindingException`                                                  | `REQUEST_BINDING_ERROR`       | 400    | none         |
-| Query or path parameter of the wrong type                                                                         | `TypeMismatchException`                                                           | `PARAMETER_TYPE_MISMATCH`     | 400    | `path`, `invalidValue`, `expectedType`         |
-| Upload exceeds the configured limit                                                                               | `MaxUploadSizeExceededException`                                                  | `PAYLOAD_TOO_LARGE`           | 413    | none         |
-| Multipart body unparsable, or request not multipart                                                               | `MultipartException`                                                              | `MALFORMED_MULTIPART_REQUEST` | 400    | none         |
-| Async request timed out                                                                                           | `AsyncRequestTimeoutException`                                                    | `REQUEST_TIMEOUT`             | 503    | none         |
-| Path variable declared but absent from the mapping                                                                | `MissingPathVariableException`                                                    | `MISSING_PATH_VARIABLE`       | 500    | none         |
-| No converter for a property type                                                                                  | `ConversionNotSupportedException`                                                 | `CONVERSION_NOT_SUPPORTED`    | 500    | none         |
-| Response body could not be serialised                                                                             | `HttpMessageNotWritableException`                                                 | `MESSAGE_NOT_WRITABLE`        | 500    | none         |
-| Exception with a declared status (see [Exceptions with a declared status](#93-exceptions-with-a-declared-status)) | `ResponseStatusException`, `ErrorResponseException`, `@ResponseStatus` exceptions | `ERROR_RESPONSE`              | varies | none         |
-| Any other exception                                                                                               | `Exception`                                                                       | `INTERNAL_SERVER_ERROR`       | 500    | none         |
+| Situation                                                                                                         | Exception                                                                         | `code`                        | Status | Extra fields                           |
+|-------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------|-------------------------------|--------|----------------------------------------|
+| HTTP method not supported                                                                                         | `HttpRequestMethodNotSupportedException`                                          | `METHOD_NOT_ALLOWED`          | 405    | none                                   |
+| `Content-Type` not accepted                                                                                       | `HttpMediaTypeNotSupportedException`                                              | `UNSUPPORTED_MEDIA_TYPE`      | 415    | none                                   |
+| Requested `Accept` type unavailable                                                                               | `HttpMediaTypeNotAcceptableException`                                             | `NOT_ACCEPTABLE`              | 406    | none                                   |
+| No handler or static resource for the path                                                                        | `NoResourceFoundException`, `NoHandlerFoundException`                             | `ROUTE_NOT_FOUND`             | 404    | none                                   |
+| Required query parameter absent                                                                                   | `MissingServletRequestParameterException`                                         | `MISSING_REQUEST_PARAMETER`   | 400    | `path`, `expectedType`                 |
+| Required multipart part absent                                                                                    | `MissingServletRequestPartException`                                              | `MISSING_REQUEST_PART`        | 400    | none                                   |
+| Other binding failure, e.g. missing header or cookie                                                              | `ServletRequestBindingException`                                                  | `REQUEST_BINDING_ERROR`       | 400    | none                                   |
+| Query or path parameter of the wrong type                                                                         | `TypeMismatchException`                                                           | `PARAMETER_TYPE_MISMATCH`     | 400    | `path`, `invalidValue`, `expectedType` |
+| Upload exceeds the configured limit                                                                               | `MaxUploadSizeExceededException`                                                  | `PAYLOAD_TOO_LARGE`           | 413    | none                                   |
+| Multipart body unparsable, or request not multipart                                                               | `MultipartException`                                                              | `MALFORMED_MULTIPART_REQUEST` | 400    | none                                   |
+| Async request timed out                                                                                           | `AsyncRequestTimeoutException`                                                    | `REQUEST_TIMEOUT`             | 503    | none                                   |
+| Path variable declared but absent from the mapping                                                                | `MissingPathVariableException`                                                    | `MISSING_PATH_VARIABLE`       | 500    | none                                   |
+| No converter for a property type                                                                                  | `ConversionNotSupportedException`                                                 | `CONVERSION_NOT_SUPPORTED`    | 500    | none                                   |
+| Response body could not be serialised                                                                             | `HttpMessageNotWritableException`                                                 | `MESSAGE_NOT_WRITABLE`        | 500    | none                                   |
+| Exception with a declared status (see [Exceptions with a declared status](#93-exceptions-with-a-declared-status)) | `ResponseStatusException`, `ErrorResponseException`, `@ResponseStatus` exceptions | `ERROR_RESPONSE`              | varies | none                                   |
+| Any other exception                                                                                               | `Exception`                                                                       | `INTERNAL_SERVER_ERROR`       | 500    | none                                   |
 
-Spring MVC errors keep Spring's own status, `title` and `detail`, except `MALFORMED_MULTIPART_REQUEST`,
-which has the library's status and text. The last row uses a generic body and is logged at `ERROR` with its
-stack trace, unless [your own code handles the exception](#9-custom-error-handling). You don't need
+Spring MVC errors keep Spring's own status, `title` and `detail`, with two exceptions:
+`MALFORMED_MULTIPART_REQUEST` has the library's status and text, and `PARAMETER_TYPE_MISMATCH` has the
+library's `detail`, which names the expected type as in [JSON errors](#32-json-request-body-errors). The
+last row uses a generic body and is logged at `ERROR` with its stack trace, unless
+[your own code handles the exception](#9-custom-error-handling). You don't need
 `spring.mvc.problemdetails.enabled`, and setting it causes no conflict.
 
 Upload limits are set with:
@@ -473,17 +475,15 @@ Every handled exception is logged with its cause, so the reason behind a respons
 logging.level.io.adzubla.blocks.error.handler=TRACE
 ```
 
-Some logs can contain rejected values, whatever the [sensitive fields](#33-validation-errors) setting:
+These traces can include rejected values, even for [sensitive fields](#33-validation-errors), so avoid `TRACE`
+in production.
+
+Some other logs can contain rejected values too, whatever the sensitive fields setting:
 
 - `DataExceptionHandler`'s integrity violation logs include the raw database message.
 - `GlobalExceptionHandler`'s `WARN` logs include the exception message, such as the value of a query
   parameter of the wrong type.
 - `JsonExceptionHandler`'s `DEBUG` logs include Jackson's message.
-
-The validation handlers' `DEBUG` logs include rejected values too, but not those of sensitive fields.
-
-These traces can include rejected values, even for [sensitive fields](#33-validation-errors), so avoid `TRACE`
-in production.
 
 Spring MVC also logs a `WARN` for every 405 under its `PageNotFound` category. To avoid logging them twice:
 
@@ -516,8 +516,9 @@ error.resource-not-found.detail=El recurso solicitado no fue encontrado.
 The full list of keys is in `io/adzubla/blocks/error/messages.properties` inside the JAR. In messages that
 take arguments (`{0}`), write a literal apostrophe as `''`.
 
-The text of Spring MVC errors, other than `MALFORMED_MULTIPART_REQUEST`, is Spring's own. Spring looks it up
-in your `MessageSource` under `problemDetail.title.<exception class>` and `problemDetail.<exception class>`.
+The text of Spring MVC errors is Spring's own, other than `MALFORMED_MULTIPART_REQUEST` and the `detail` of
+`PARAMETER_TYPE_MISMATCH`. Spring looks it up in your `MessageSource` under
+`problemDetail.title.<exception class>` and `problemDetail.<exception class>`.
 
 ### 8.2 Locale resolution
 
@@ -821,19 +822,19 @@ that lists them.
 
 **Request format.** Fix the request before sending it again.
 
-| Situation                                                     | `code`                        | Status | Extra fields   |
-|---------------------------------------------------------------|-------------------------------|--------|----------------|
-| No such route                                                 | `ROUTE_NOT_FOUND`             | 404    | none           |
-| The route doesn't support this HTTP method                    | `METHOD_NOT_ALLOWED`          | 405    | none           |
-| The API can't produce the type asked for in `Accept`          | `NOT_ACCEPTABLE`              | 406    | none           |
-| The API doesn't accept this `Content-Type`                    | `UNSUPPORTED_MEDIA_TYPE`      | 415    | none           |
-| A required query parameter is missing                         | `MISSING_REQUEST_PARAMETER`   | 400    | `path`, `expectedType`           |
-| A query or path parameter has the wrong type                  | `PARAMETER_TYPE_MISMATCH`     | 400    | `path`, `invalidValue`, `expectedType`           |
-| The request can't be bound, e.g. a required header is missing | `REQUEST_BINDING_ERROR`       | 400    | none           |
-| The sort parameter names an unknown property                  | `INVALID_PROPERTY_REFERENCE`  | 400    | `invalidValue` |
-| A required part of a multipart request is missing             | `MISSING_REQUEST_PART`        | 400    | none           |
-| The multipart request can't be read, or isn't multipart       | `MALFORMED_MULTIPART_REQUEST` | 400    | none           |
-| The upload is too large                                       | `PAYLOAD_TOO_LARGE`           | 413    | none           |
+| Situation                                                     | `code`                        | Status | Extra fields                           |
+|---------------------------------------------------------------|-------------------------------|--------|----------------------------------------|
+| No such route                                                 | `ROUTE_NOT_FOUND`             | 404    | none                                   |
+| The route doesn't support this HTTP method                    | `METHOD_NOT_ALLOWED`          | 405    | none                                   |
+| The API can't produce the type asked for in `Accept`          | `NOT_ACCEPTABLE`              | 406    | none                                   |
+| The API doesn't accept this `Content-Type`                    | `UNSUPPORTED_MEDIA_TYPE`      | 415    | none                                   |
+| A required query parameter is missing                         | `MISSING_REQUEST_PARAMETER`   | 400    | `path`, `expectedType`                 |
+| A query or path parameter has the wrong type                  | `PARAMETER_TYPE_MISMATCH`     | 400    | `path`, `invalidValue`, `expectedType` |
+| The request can't be bound, e.g. a required header is missing | `REQUEST_BINDING_ERROR`       | 400    | none                                   |
+| The sort parameter names an unknown property                  | `INVALID_PROPERTY_REFERENCE`  | 400    | `invalidValue`                         |
+| A required part of a multipart request is missing             | `MISSING_REQUEST_PART`        | 400    | none                                   |
+| The multipart request can't be read, or isn't multipart       | `MALFORMED_MULTIPART_REQUEST` | 400    | none                                   |
+| The upload is too large                                       | `PAYLOAD_TOO_LARGE`           | 413    | none                                   |
 
 **Resource state.** The request is well formed, but conflicts with the data the API holds. Reload the
 resource and try again after `OPTIMISTIC_LOCKING_FAILURE`; otherwise, change the request.
