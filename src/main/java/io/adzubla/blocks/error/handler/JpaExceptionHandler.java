@@ -51,22 +51,16 @@ public class JpaExceptionHandler {
 
     @ExceptionHandler(EntityNotFoundException.class)
     public ResponseEntity<ProblemDetail> handleEntityNotFound(EntityNotFoundException ex) {
-        log.debug("{} {}: Entity not found: {}", HttpStatus.NOT_FOUND.value(), ErrorCode.RESOURCE_NOT_FOUND, Causes.describe(ex));
-        log.trace("Stack trace:", ex);
-        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND,
-                messages.get("error.resource-not-found.detail"));
-        problem.setTitle(messages.get("error.resource-not-found.title"));
-        problem.setProperty("code", ErrorCode.RESOURCE_NOT_FOUND.name());
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
+        return notFound("Entity not found", ex);
     }
 
     @ExceptionHandler(NoResultException.class)
     public ResponseEntity<ProblemDetail> handleNoResult(NoResultException ex) {
-        return handleEntityNotFoundLike(ex);
+        return notFound("No result", ex);
     }
 
-    private ResponseEntity<ProblemDetail> handleEntityNotFoundLike(RuntimeException ex) {
-        log.debug("{} {}: No result: {}", HttpStatus.NOT_FOUND.value(), ErrorCode.RESOURCE_NOT_FOUND, Causes.describe(ex));
+    private ResponseEntity<ProblemDetail> notFound(String what, RuntimeException ex) {
+        log.debug("{} {}: {}: {}", HttpStatus.NOT_FOUND.value(), ErrorCode.RESOURCE_NOT_FOUND, what, Causes.describe(ex));
         log.trace("Stack trace:", ex);
         var problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND,
                 messages.get("error.resource-not-found.detail"));

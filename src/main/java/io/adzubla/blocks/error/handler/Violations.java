@@ -3,11 +3,18 @@ package io.adzubla.blocks.error.handler;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.TypeMismatchException;
 import org.springframework.context.MessageSourceResolvable;
+import org.springframework.core.MethodParameter;
+import org.springframework.util.StringUtils;
 import org.springframework.validation.FieldError;
 import org.springframework.validation.ObjectError;
 import org.springframework.validation.method.MethodValidationResult;
 import org.springframework.validation.method.ParameterErrors;
 import org.springframework.validation.method.ParameterValidationResult;
+import org.springframework.web.bind.annotation.CookieValue;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -135,7 +142,8 @@ final class Violations {
 
     /**
      * Violations of a Spring method-validation result (controller or {@code @Validated} bean
-     * parameters). A constrained scalar parameter is reported as {@code $.<name>}, with the
+     * parameters). A constrained scalar parameter is reported as {@code $.<name>}, the name being
+     * the one the client used when the parameter declares it ({@code @RequestParam("page_size")}), with the
      * element index or key appended for a container element ({@code $.tags[1]}); a validated
      * object contributes the paths of its own fields, and an object-level or cross-parameter
      * constraint is reported as {@code $}.
@@ -149,8 +157,7 @@ final class Violations {
                     violations.add(of(root, error));
                 }
             } else {
-                var name = parameter.getMethodParameter().getParameterName();
-                var path = "$." + (name != null ? name : "?") + containerSuffix(parameter);
+                var path = "$." + clientName(parameter.getMethodParameter()) + containerSuffix(parameter);
                 for (var error : parameter.getResolvableErrors()) {
                     violations.add(of(path, parameter.getArgument(), error.getDefaultMessage()));
                 }
@@ -160,6 +167,36 @@ final class Violations {
             violations.add(withoutValue("$", error.getDefaultMessage()));
         }
         return violations;
+    }
+
+    // The name the client used for a controller parameter (@RequestParam("page_size") int pageSize
+    // is "page_size"), falling back to the Java parameter name, which is all a service method has.
+    private static String clientName(MethodParameter parameter) {
+        String name = null;
+        var requestParam = parameter.getParameterAnnotation(RequestParam.class);
+        var pathVariable = parameter.getParameterAnnotation(PathVariable.class);
+        var requestHeader = parameter.getParameterAnnotation(RequestHeader.class);
+        var cookieValue = parameter.getParameterAnnotation(CookieValue.class);
+        var requestPart = parameter.getParameterAnnotation(RequestPart.class);
+        if (requestParam != null) {
+            name = firstText(requestParam.name(), requestParam.value());
+        } else if (pathVariable != null) {
+            name = firstText(pathVariable.name(), pathVariable.value());
+        } else if (requestHeader != null) {
+            name = firstText(requestHeader.name(), requestHeader.value());
+        } else if (cookieValue != null) {
+            name = firstText(cookieValue.name(), cookieValue.value());
+        } else if (requestPart != null) {
+            name = firstText(requestPart.name(), requestPart.value());
+        }
+        if (name == null) {
+            name = parameter.getParameterName();
+        }
+        return name != null ? name : "?";
+    }
+
+    private static String firstText(String name, String value) {
+        return StringUtils.hasText(name) ? name : StringUtils.hasText(value) ? value : null;
     }
 
     private static String containerSuffix(ParameterValidationResult parameter) {

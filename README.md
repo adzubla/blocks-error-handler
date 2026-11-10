@@ -207,6 +207,7 @@ Each violation has:
 | A field of a request body                | `@NotBlank String name`                     | `$.name`           |
 | A nested field                           | `@NotBlank String street` in `address`      | `$.address.street` |
 | A controller or service parameter        | `find(@NotBlank String code)`               | `$.code`           |
+| A controller parameter with its own name | `@RequestParam("page_size") int pageSize`   | `$.page_size`      |
 | An element of a collection parameter     | `tag(List<@NotBlank String> tags)`          | `$.tags[1]`        |
 | A field of a validated service parameter | `create(@Valid Request request)`            | `$.name`           |
 | A whole object, or several parameters    | A class-level or cross-parameter constraint | `$`                |
@@ -373,9 +374,9 @@ Things to be aware of:
 - **The trace ID exclusion applies to 401/403 responses**, whoever produced them. A 401/403 answered by an
   `@ExceptionHandler` has no header but still has `traceId` in its body. See [Trace ID](#4-trace-id) to
   change the excluded statuses.
-- **A wrapped Security exception is a 500.** If another exception wraps an `AccessDeniedException` or
-  `AuthenticationException`, it is treated as unexpected. Unwrap it, or handle it with your own
-  `@ExceptionHandler`.
+- **A wrapped Security exception is answered by Security too.** If another exception wraps an
+  `AccessDeniedException` or `AuthenticationException`, the library still leaves it to Spring Security,
+  which looks for them in the cause chain.
 - **`/error` must be permitted.** Errors that Spring Boot routes through `/error`, such as failures
   raised inside filters, are subject to your Security rules. Anonymous callers get a 401 instead of the
   real error unless `/error` is permitted, and that 401 does have the `X-Trace-Id` header. Errors this
@@ -641,8 +642,8 @@ If you don't need your own code, these become Problem Details bodies with their 
 
 - `ResponseStatusException`
 - `ErrorResponseException` and its subclasses. A `code` you set on one is replaced by `ERROR_RESPONSE`.
-- exceptions annotated with `@ResponseStatus`, directly or on a superclass. The annotation's `reason`
-  becomes `detail`, and is resolved as a message code if one matches.
+- exceptions annotated with `@ResponseStatus`, directly or on a superclass, even when another exception
+  wraps them. The annotation's `reason` becomes `detail`, and is resolved as a message code if one matches.
 
 ### 9.4 Precedence over this library
 

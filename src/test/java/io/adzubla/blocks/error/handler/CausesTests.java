@@ -22,4 +22,22 @@ class CausesTests {
         assertThat(Causes.describe(ex)).isEqualTo(
                 "java.lang.IllegalStateException: could not save; root cause: java.sql.SQLException: duplicate key");
     }
+
+    @Test
+    void chain_listsTheExceptionAndItsCausesOutermostFirst() {
+        var root = new SQLException("duplicate key");
+        var middle = new RuntimeException("wrapper", root);
+        var ex = new IllegalStateException("could not save", middle);
+
+        assertThat(Causes.chain(ex)).containsExactly(ex, middle, root);
+    }
+
+    @Test
+    void chain_endsOnACauseLoop() {
+        var first = new RuntimeException("first");
+        var second = new RuntimeException("second", first);
+        first.initCause(second);
+
+        assertThat(Causes.chain(first)).containsExactly(first, second);
+    }
 }

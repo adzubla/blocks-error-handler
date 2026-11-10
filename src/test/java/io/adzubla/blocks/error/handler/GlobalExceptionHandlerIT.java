@@ -174,6 +174,30 @@ class GlobalExceptionHandlerIT {
     }
 
     @Test
+    void wrappedResponseStatusException_keepsDeclaredStatus() throws Exception {
+        mvc.perform(post("/test/global/annotated-wrapped"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("ERROR_RESPONSE"));
+    }
+
+    @Test
+    void wrappedAccessDenied_isRethrownForSpringSecurity() {
+        assertThatThrownBy(() -> mvc.perform(post("/test/global/access-denied-wrapped")))
+                .isInstanceOf(ServletException.class)
+                .hasRootCauseInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void methodValidation_reportsTheRequestParameterName() throws Exception {
+        mvc.perform(get("/test/global/sized").param("page_size", "0").header("X-Api-Version", "0"))
+                .andDo(print())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.violations[?(@.path == '$.page_size')].invalidValue").value("0"))
+                .andExpect(jsonPath("$.violations[?(@.path == '$.X-Api-Version')].invalidValue").value("0"))
+                .andExpect(jsonPath("$.violations[?(@.path == '$.pageSize')]").isEmpty());
+    }
+
+    @Test
     void accessDenied_isRethrownForSpringSecurity() {
         assertThatThrownBy(() -> mvc.perform(post("/test/global/access-denied")))
                 .isInstanceOf(ServletException.class)
@@ -244,6 +268,23 @@ class GlobalExceptionHandlerIT {
         @PostMapping("/fail")
         void fail() {
             throw new RuntimeException("simulated error");
+        }
+
+        @PostMapping("/annotated-wrapped")
+        void annotatedWrapped() {
+            throw new IllegalStateException("wrapped", new ConflictException());
+        }
+
+        @PostMapping("/access-denied-wrapped")
+        void accessDeniedWrapped() {
+            throw new IllegalStateException("wrapped", new AccessDeniedException("denied"));
+        }
+
+        @GetMapping("/sized")
+        String sized(@RequestParam("page_size") @jakarta.validation.constraints.Min(1) int pageSize,
+                     @org.springframework.web.bind.annotation.RequestHeader("X-Api-Version")
+                     @jakarta.validation.constraints.Min(1) int version) {
+            return "ok";
         }
 
         @PostMapping("/annotated")

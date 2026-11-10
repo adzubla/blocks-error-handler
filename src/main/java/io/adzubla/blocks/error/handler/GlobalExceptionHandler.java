@@ -61,11 +61,13 @@ import java.util.stream.Stream;
  * {@code INTERNAL_SERVER_ERROR} and logs the stack trace at {@code ERROR} level, except for:
  * <ul>
  *   <li>Exceptions annotated with {@link ResponseStatus @ResponseStatus} (directly or on a
- *       superclass) keep their declared status and reason, with {@code code=ERROR_RESPONSE} —
+ *       superclass, or wrapped in another exception) keep their declared status and reason, with
+ *       {@code code=ERROR_RESPONSE} —
  *       mirroring what Spring's {@code ResponseStatusExceptionResolver} would have done had this
  *       catch-all not claimed them first.
  *   <li>Spring Security's {@code AccessDeniedException} and {@code AuthenticationException} (e.g.
- *       from {@code @PreAuthorize} method security) are rethrown so they propagate to Spring
+ *       from {@code @PreAuthorize} method security), even wrapped in another exception, are
+ *       rethrown so they propagate to Spring
  *       Security's {@code ExceptionTranslationFilter} and produce its 401/403 response. These are
  *       detected by class name, so Spring Security remains an optional dependency.
  * </ul>
@@ -200,14 +202,21 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ProblemDetail> handleUnexpected(Exception ex) throws Exception {
-        for (var type : PROPAGATED_EXCEPTIONS) {
-            if (type.isInstance(ex)) {
-                throw ex;
+        // Both lookups walk the cause chain, as Spring Security's ExceptionTranslationFilter and
+        // Spring's ResponseStatusExceptionResolver do: the exception that matters is often wrapped.
+        var chain = Causes.chain(ex);
+        for (var cause : chain) {
+            for (var type : PROPAGATED_EXCEPTIONS) {
+                if (type.isInstance(cause)) {
+                    throw ex;
+                }
             }
         }
-        var responseStatus = AnnotatedElementUtils.findMergedAnnotation(ex.getClass(), ResponseStatus.class);
-        if (responseStatus != null) {
-            return handleAnnotatedStatus(ex, responseStatus);
+        for (var cause : chain) {
+            var responseStatus = AnnotatedElementUtils.findMergedAnnotation(cause.getClass(), ResponseStatus.class);
+            if (responseStatus != null) {
+                return handleAnnotatedStatus(ex, responseStatus);
+            }
         }
         log.error("{} {}: Unexpected error", HttpStatus.INTERNAL_SERVER_ERROR.value(), ErrorCode.INTERNAL_SERVER_ERROR, ex);
         var problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,

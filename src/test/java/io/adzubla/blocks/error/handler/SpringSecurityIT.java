@@ -117,12 +117,12 @@ class SpringSecurityIT {
     }
 
     @Test
-    void securityExceptionWrappedInAnotherException_becomesA500() throws Exception {
-        // Known limitation: only a top-level Security exception is rethrown (see README).
-        mvc.perform(get("/open/wrapped-denial"))
+    void securityExceptionWrappedInAnotherException_isAnsweredBySecurityToo() throws Exception {
+        mvc.perform(as(get("/open/wrapped-denial"), "user"))
                 .andDo(print())
-                .andExpect(status().isInternalServerError())
-                .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"));
+                .andExpect(status().isForbidden())
+                .andExpect(header().doesNotExist("X-Trace-Id"))
+                .andExpect(content().string(""));
     }
 
     // --- the library's own responses keep working for callers Security lets through ---
