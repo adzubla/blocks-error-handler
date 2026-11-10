@@ -25,8 +25,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class SensitiveFieldsPropertyIT {
 
-    private static final String PASSWORD_VALUE = "$.violations[?(@.path=='$.password')].invalidValue";
-    private static final String PIN_VALUE = "$.violations[?(@.path=='$.pin')].invalidValue";
+    private static final String PASSWORD_VALUE = "$.errors[?(@.path=='$.password')].invalidValue";
+    private static final String PIN_VALUE = "$.errors[?(@.path=='$.pin')].invalidValue";
 
     private static ResultActions postShortValues(MockMvc mvc) throws Exception {
         return mvc.perform(post("/test/sensitive")

@@ -90,6 +90,27 @@ class GlobalExceptionHandlerIT {
     }
 
     @Test
+    void pathVariableConvertedToNull_isARequestBindingError() throws Exception {
+        // A blank UUID converts to null: the client's fault, not the server's missing variable.
+        mvc.perform(get("/test/global/items/{id}", " "))
+                .andDo(print())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("REQUEST_BINDING_ERROR"))
+                .andExpect(jsonPath("$.type").value("urn:problem-type:request-binding-error"))
+                .andExpect(jsonPath("$.title").value("Bad Request"));
+    }
+
+    @Test
+    void pathVariableMissingFromTheMapping_isAServerError() throws Exception {
+        mvc.perform(get("/test/global/unmapped-variable"))
+                .andDo(print())
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("MISSING_PATH_VARIABLE"))
+                .andExpect(jsonPath("$.type").value("urn:problem-type:missing-path-variable"))
+                .andExpect(jsonPath("$.title").value("Internal Server Error"));
+    }
+
+    @Test
     void sensitiveParamOfTheWrongType_doesNotEchoTheValue() throws Exception {
         mvc.perform(get("/test/global/reset").param("token", "hunter2"))
                 .andDo(print())
@@ -140,6 +161,7 @@ class GlobalExceptionHandlerIT {
                 .andExpect(status().isInternalServerError())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"))
+                .andExpect(jsonPath("$.type").value("urn:problem-type:internal-server-error"))
                 .andExpect(jsonPath("$.traceId").isString());
     }
 
@@ -160,6 +182,9 @@ class GlobalExceptionHandlerIT {
                 .andExpect(status().isNotFound())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("ERROR_RESPONSE"))
+                // No type of its own: about:blank, with the status phrase as title.
+                .andExpect(jsonPath("$.type").doesNotExist())
+                .andExpect(jsonPath("$.title").value("Not Found"))
                 .andExpect(jsonPath("$.detail").value("Widget not found"))
                 .andExpect(jsonPath("$.traceId").isString());
     }
@@ -192,9 +217,9 @@ class GlobalExceptionHandlerIT {
         mvc.perform(get("/test/global/sized").param("page_size", "0").header("X-Api-Version", "0"))
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.violations[?(@.path == '$.page_size')].invalidValue").value("0"))
-                .andExpect(jsonPath("$.violations[?(@.path == '$.X-Api-Version')].invalidValue").value("0"))
-                .andExpect(jsonPath("$.violations[?(@.path == '$.pageSize')]").isEmpty());
+                .andExpect(jsonPath("$.errors[?(@.path == '$.page_size')].invalidValue").value("0"))
+                .andExpect(jsonPath("$.errors[?(@.path == '$.X-Api-Version')].invalidValue").value("0"))
+                .andExpect(jsonPath("$.errors[?(@.path == '$.pageSize')]").isEmpty());
     }
 
     @Test
@@ -249,6 +274,12 @@ class GlobalExceptionHandlerIT {
 
         @GetMapping("/items/{id}")
         String item(@PathVariable UUID id) {
+            return "ok";
+        }
+
+        // Declares a path variable the mapping doesn't have: a server-side defect.
+        @GetMapping("/unmapped-variable")
+        String unmappedVariable(@PathVariable String id) {
             return "ok";
         }
 

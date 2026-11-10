@@ -73,9 +73,9 @@ public class ConstraintViolationExceptionHandler {
         var violations = constraintViolations.stream()
                 .map(violation -> violationMapper.of(jsonPath(violation.getPropertyPath()),
                         violation.getInvalidValue(), violation.getMessage()))
-                // By message too, so several violations on one path come out in a stable order.
+                // By detail too, so several violations on one path come out in a stable order.
                 .sorted(Comparator.<Map<String, String>, String>comparing(v -> v.get("path"))
-                        .thenComparing(v -> v.get("message")))
+                        .thenComparing(v -> v.get("detail")))
                 .toList();
 
         log.debug("{} {}: Constraint violation with {} violation(s): {}",
@@ -86,7 +86,7 @@ public class ConstraintViolationExceptionHandler {
                 messages.get("error.validation-failed.detail"));
         problem.setTitle(messages.get("error.validation-failed.title"));
         problem.setProperty("code", ErrorCode.VALIDATION_FAILED.name());
-        problem.setProperty("violations", violations);
+        problem.setProperty("errors", violations);
         return ResponseEntity.unprocessableContent().body(problem);
     }
 

@@ -6,6 +6,8 @@ import io.adzubla.blocks.error.handler.DataExceptionProperties;
 import io.adzubla.blocks.error.handler.GlobalExceptionHandler;
 import io.adzubla.blocks.error.handler.JpaExceptionHandler;
 import io.adzubla.blocks.error.handler.JsonExceptionHandler;
+import io.adzubla.blocks.error.handler.ProblemTypeAdvice;
+import io.adzubla.blocks.error.handler.ProblemTypeProperties;
 import io.adzubla.blocks.error.handler.SpringDataExceptionHandler;
 import io.adzubla.blocks.error.handler.ValidationExceptionHandler;
 import io.adzubla.blocks.error.handler.ValidationExceptionProperties;
@@ -41,8 +43,14 @@ import tools.jackson.databind.json.JsonMapper;
 @AutoConfiguration(beforeName = "org.springframework.boot.webmvc.autoconfigure.WebMvcAutoConfiguration")
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnBooleanProperty(name = "blocks.error.enabled", matchIfMissing = true)
-@EnableConfigurationProperties(ValidationExceptionProperties.class)
+@EnableConfigurationProperties({ValidationExceptionProperties.class, ProblemTypeProperties.class})
 public class ErrorHandlerAutoConfiguration {
+
+    @Bean
+    @ConditionalOnMissingBean
+    ProblemTypeAdvice problemTypeAdvice(ProblemTypeProperties properties) {
+        return new ProblemTypeAdvice(properties);
+    }
 
     @Bean
     @ConditionalOnMissingBean

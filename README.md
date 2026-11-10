@@ -96,6 +96,7 @@ Errors handled by Spring MVC look like this, plus the extra fields described in 
 
 ```json
 {
+  "type": "urn:problem-type:method-not-allowed",
   "title": "Method Not Allowed",
   "status": 405,
   "detail": "Method 'DELETE' is not supported.",
@@ -107,6 +108,19 @@ Errors handled by Spring MVC look like this, plus the extra fields described in 
 
 `code` is the stable field to branch on (see the [guide for API consumers](#10-guide-for-api-consumers)).
 `title` and `detail` are for people and can be [translated or reworded](#8-internationalisation-i18n).
+
+`type` is the URI that RFC 9457 uses to identify the kind of problem: a base URI followed by the `code` in
+lower case, with `-` instead of `_`. Point the base at your API documentation to make the types resolvable:
+
+```properties
+# Defaults to urn:problem-type:, which identifies the problem but can't be opened.
+# Leave it empty to send no type.
+blocks.error.problem-type.base-uri=https://api.example.com/problems/
+```
+
+`ERROR_RESPONSE` has no `type` of its own, and a `type` already set on an exception is kept (see
+[Exceptions with a declared status](#93-exceptions-with-a-declared-status)). Without a `type`, RFC 9457
+reads it as `about:blank`, and `title` is the HTTP status text.
 
 Two kinds of error don't use this format: the 401/403 responses written by
 [Spring Security](#5-spring-security), and errors that don't reach an `@ExceptionHandler`, such as an
@@ -159,6 +173,7 @@ and `@JsonValue` names are listed rather than the Java constant names.
 
 ```json
 {
+  "type": "urn:problem-type:invalid-enum-value",
   "title": "Invalid enum value",
   "status": 400,
   "detail": "Invalid value 'UNKNOWN' at path $.category — valid values: [ELECTRONICS, BOOKS, CLOTHING]",
@@ -186,36 +201,37 @@ spring.jackson.deserialization.fail-on-ignored-properties=true
 
 | Situation                                                                                      | Exception                          | `code`                  | Status | Extra fields |
 |------------------------------------------------------------------------------------------------|------------------------------------|-------------------------|--------|--------------|
-| `@Valid` on a request body                                                                     | `MethodArgumentNotValidException`  | `VALIDATION_FAILED`     | 422    | `violations` |
-| Constraints on controller parameters                                                           | `HandlerMethodValidationException` | `VALIDATION_FAILED`     | 422    | `violations` |
-| `@Validated` on another bean, such as a service, or a direct `Validator` call                  | `ConstraintViolationException`     | `VALIDATION_FAILED`     | 422    | `violations` |
-| `@Validated` on another bean, with `spring.validation.method.adapt-constraint-violations=true` | `MethodValidationException`        | `VALIDATION_FAILED`     | 422    | `violations` |
+| `@Valid` on a request body                                                                     | `MethodArgumentNotValidException`  | `VALIDATION_FAILED`     | 422    | `errors`     |
+| Constraints on controller parameters                                                           | `HandlerMethodValidationException` | `VALIDATION_FAILED`     | 422    | `errors`     |
+| `@Validated` on another bean, such as a service, or a direct `Validator` call                  | `ConstraintViolationException`     | `VALIDATION_FAILED`     | 422    | `errors`     |
+| `@Validated` on another bean, with `spring.validation.method.adapt-constraint-violations=true` | `MethodValidationException`        | `VALIDATION_FAILED`     | 422    | `errors`     |
 | Constraint on a method's return value                                                          | Any of the last three above        | `INTERNAL_SERVER_ERROR` | 500    | none         |
 
 A return-value violation means the server produced invalid data, so it is logged at `ERROR`.
 
 ```json
 {
+  "type": "urn:problem-type:validation-failed",
   "title": "Validation failed",
   "status": 422,
   "detail": "One or more fields failed validation",
   "instance": "/products",
   "code": "VALIDATION_FAILED",
-  "violations": [
-    { "path": "$.name", "invalidValue": "", "message": "must not be blank" },
-    { "path": "$.price", "invalidValue": "-1", "message": "must be greater than 0" }
+  "errors": [
+    { "path": "$.name", "invalidValue": "", "detail": "must not be blank" },
+    { "path": "$.price", "invalidValue": "-1", "detail": "must be greater than 0" }
   ],
   "traceId": "69fcf2db21f488679d633abb34871dbb"
 }
 ```
 
-Each violation has:
+Each entry of `errors`, named and shaped after the example in RFC 9457, has:
 
 - **`path`**: the JSONPath-style location in the request (see the table below).
 - **`invalidValue`**: the rejected value as a string, or JSON `null` if the value was `null`. Only simple
   values are returned, such as strings, numbers, booleans, dates and enums. It is absent for a collection,
   array or object, including a class-level or cross-parameter constraint, so their contents are not returned.
-- **`message`**: the constraint message (see
+- **`detail`**: the constraint message (see
   [Validation constraint messages](#83-validation-constraint-messages)). A value that can't be converted
   to the field's type, such as `age=abc` on a form object, gets the message `Invalid value — expected integer (int32)`
   instead of the conversion error, which names Java types.
@@ -244,7 +260,7 @@ the property replaces the defaults, and leaving it empty returns every simple va
 blocks.error.validation.sensitive-fields=password,passwd,pwd,secret,token,apikey,privatekey,credential
 ```
 
-This applies to `violations`, and to the `invalidValue` and `detail` of `PARAMETER_TYPE_MISMATCH` for a
+This applies to `errors`, and to the `invalidValue` and `detail` of `PARAMETER_TYPE_MISMATCH` for a
 query or path parameter. A JSON error can still echo a value that couldn't be converted, such as a malformed
 `UUID` in `$.token`. A database error can echo a stored value (see [Data access errors](#34-data-access-errors)).
 
@@ -271,6 +287,7 @@ rely on one there for a check that must hold. On a service with the default sett
 
 ```json
 {
+  "type": "urn:problem-type:duplicate-value",
   "title": "Duplicate value",
   "status": 409,
   "detail": "A resource with the same value already exists.",
@@ -316,7 +333,7 @@ a missing one and for a row that others still reference.
 | Requested `Accept` type unavailable                                                                               | `HttpMediaTypeNotAcceptableException`                                             | `NOT_ACCEPTABLE`              | 406    | none                                   |
 | Required query parameter absent                                                                                   | `MissingServletRequestParameterException`                                         | `MISSING_REQUEST_PARAMETER`   | 400    | `path`, `expectedType`                 |
 | Required multipart part absent                                                                                    | `MissingServletRequestPartException`                                              | `MISSING_REQUEST_PART`        | 400    | none                                   |
-| Other binding failure, e.g. missing header or cookie                                                              | `ServletRequestBindingException`                                                  | `REQUEST_BINDING_ERROR`       | 400    | none                                   |
+| Other binding failure, e.g. missing header or cookie, or a path variable converted to null (a blank UUID)         | `ServletRequestBindingException`, `MissingPathVariableException`                  | `REQUEST_BINDING_ERROR`       | 400    | none                                   |
 | Query or path parameter of the wrong type                                                                         | `TypeMismatchException`                                                           | `PARAMETER_TYPE_MISMATCH`     | 400    | `path`, `invalidValue`, `expectedType` |
 | Upload exceeds the configured limit                                                                               | `MaxUploadSizeExceededException`                                                  | `PAYLOAD_TOO_LARGE`           | 413    | none                                   |
 | Multipart body unparsable, or request not multipart                                                               | `MultipartException`                                                              | `MALFORMED_MULTIPART_REQUEST` | 400    | none                                   |
@@ -423,7 +440,7 @@ Exceptions a disabled handler would have covered fall through to `GlobalExceptio
 defaults if that is disabled too:
 
 - JSON errors become 400 `MALFORMED_REQUEST_BODY`.
-- Spring MVC validation errors become 422 `VALIDATION_FAILED` with Spring's body, without `violations`. A
+- Spring MVC validation errors become 422 `VALIDATION_FAILED` with Spring's body, without `errors`. A
   `MethodValidationException` becomes 500 `METHOD_VALIDATION_ERROR`, a code that only occurs in this setup.
 - Data access, JPA, `PropertyReferenceException` and `ConstraintViolationException` errors become 500
   `INTERNAL_SERVER_ERROR`.
@@ -465,7 +482,7 @@ Every handled exception is logged with its cause, so the reason behind a respons
 
 - The one-line summary names the exception and its message, followed by the type and message of its root
   cause when it has one, such as the driver's `SQLException` behind a data access exception.
-- Validation errors list each violation's `path`, `message` and rejected value. The value follows the same
+- Validation errors list each violation's `path`, `detail` and rejected value. The value follows the same
   rules as `invalidValue` in the response, so it is left out for a
   [sensitive field](#33-validation-errors) and for a collection, array or object.
 - The stack trace is logged with every `ERROR`. For client errors it is logged separately at `TRACE`, by
@@ -537,7 +554,7 @@ spring.web.locale=en
 
 ### 8.3 Validation constraint messages
 
-`violations[].message` comes from Bean Validation, not from the library's keys above. Hibernate Validator
+`errors[].detail` comes from Bean Validation, not from the library's keys above. Hibernate Validator
 ships translations for many languages, including Portuguese. To override or add messages, put a
 `ValidationMessages_<locale>.properties` file on your classpath. Spring Boot also resolves a `{key}` in a
 constraint message from your `MessageSource`, so those keys can live in `messages*.properties` instead.
@@ -584,6 +601,14 @@ The library adds `traceId` and the `X-Trace-Id` header, and Spring adds `instanc
 ```
 
 Without `setTitle`, `title` is the HTTP status text, such as `Conflict`.
+
+The library sets `type` only for its own codes. With a `title` of your own, give your code a `type` too, as
+RFC 9457 expects, for example with the same base URI as the library's
+(see [Response format](#31-response-format)):
+
+```java
+problem.setType(URI.create("https://api.example.com/problems/order-closed"));
+```
 
 ### 9.2 Handling many exceptions with a base class
 
@@ -662,7 +687,8 @@ If you don't need your own code, these become Problem Details bodies with their 
 `code=ERROR_RESPONSE`:
 
 - `ResponseStatusException`
-- `ErrorResponseException` and its subclasses. A `code` you set on one is replaced by `ERROR_RESPONSE`.
+- `ErrorResponseException` and its subclasses. A `code` you set on one is replaced by `ERROR_RESPONSE`, but
+  a `type` you set is kept.
 - exceptions annotated with `@ResponseStatus`, directly or on a superclass, even when another exception
   wraps them. The annotation's `reason` becomes `detail`, and is resolved as a message code if one matches.
 
@@ -684,14 +710,15 @@ Your handlers run before the library's catch-all, with no `@Order` needed. There
 - **Keep codes stable.** A code is part of your API's contract: use `UPPER_SNAKE_CASE`, give each code one
   meaning, and don't rename it once clients depend on it.
 - **Reuse a library code when the meaning is the same.** For a missing resource, use
-  `ErrorCode.RESOURCE_NOT_FOUND.name()` rather than inventing a new code.
+  `ErrorCode.RESOURCE_NOT_FOUND.name()` rather than inventing a new code. The response then gets that code's
+  `type` too.
 - **Choose the status by who must act.** Use 404 for a missing resource, 409 for a conflict with the current
   state, 422 for values that break a rule, and 5xx only for faults on the server.
 - **Write `detail` for the client.** Don't include stack traces, SQL, internal identifiers or the message of a
   third-party exception. Log those instead.
 - **Log by fault.** Log client errors as a one-line summary at `DEBUG` or `WARN`, and server faults at `ERROR`
   with the stack trace. The library doesn't log exceptions your handler takes.
-- **Reuse the library's extra fields.** Use `path`, `invalidValue`, `validValues` and `violations` with the
+- **Reuse the library's extra fields.** Use `path`, `invalidValue`, `validValues` and `errors` with the
   same meaning they have elsewhere, but leave sensitive values out yourself: the
   [sensitive fields](#33-validation-errors) setting doesn't apply to your handlers. A business rule on a field
   can use the validation format, so clients handle both the same way:
@@ -701,10 +728,10 @@ Your handlers run before the library's catch-all, with no `@Order` needed. There
   var problem = ProblemDetail.forStatusAndDetail(status, "One or more fields failed validation");
   problem.setTitle("Validation failed");
   problem.setProperty("code", ErrorCode.VALIDATION_FAILED.name());
-  problem.setProperty("violations", List.of(Map.of(
+  problem.setProperty("errors", List.of(Map.of(
           "path", "$.quantity",
           "invalidValue", "500",
-          "message", "exceeds the stock available")));
+          "detail", "exceeds the stock available")));
   return ResponseEntity.status(status).body(problem);
   ```
 
@@ -721,6 +748,7 @@ Errors follow [RFC 9457 Problem Details](https://www.rfc-editor.org/rfc/rfc9457)
 
 ```json
 {
+  "type": "urn:problem-type:invalid-enum-value",
   "title": "Invalid enum value",
   "status": 400,
   "detail": "Invalid value 'UNKNOWN' at path $.category — valid values: [ELECTRONICS, BOOKS, CLOTHING]",
@@ -739,6 +767,7 @@ These fields are part of every error, except where marked optional:
 | Field      | Type   | Presence | Description                                                 |
 |------------|--------|----------|-------------------------------------------------------------|
 | `code`     | string | Always   | Stable identifier of the error. Use this field in your code |
+| `type`     | string | Optional | URI identifying the kind of error, derived from `code`      |
 | `status`   | number | Always   | HTTP status, same as the response status                    |
 | `title`    | string | Always   | Short summary for people. May be translated                 |
 | `detail`   | string | Optional | Explanation for people. May be translated                   |
@@ -756,27 +785,28 @@ These fields are all optional, and appear only for some codes (see [Error codes]
 | `validRange`   | string           | Optional | The accepted numeric range, e.g. `[-2147483648, 2147483647]`  |
 | `line`         | number           | Optional | Line of the problem in the request body                       |
 | `column`       | number           | Optional | Column of the problem in the request body                     |
-| `violations`   | array of objects | Optional | Every validation failure in the request (see below)           |
+| `errors`       | array of objects | Optional | Every validation failure in the request (see below)           |
 
-Each `violations` entry has:
+Each `errors` entry has:
 
 | Field          | Type           | Presence | Description                                                                                      |
 |----------------|----------------|----------|--------------------------------------------------------------------------------------------------|
 | `path`         | string         | Always   | Location in the request: a body field, or a query or path parameter. `$` means the whole request |
 | `invalidValue` | string or null | Optional | The rejected value, `null` if the value was null, and absent for a list, object or secret        |
 | `expectedType` | string         | Optional | Only for a value of the wrong type: the expected type, as in OpenAPI, e.g. `integer (int32)`     |
-| `message`      | string         | Always   | Why the value was rejected. May be translated                                                    |
+| `detail`       | string         | Always   | Why the value was rejected. May be translated                                                    |
 
 ```json
 {
+  "type": "urn:problem-type:validation-failed",
   "title": "Validation failed",
   "status": 422,
   "detail": "One or more fields failed validation",
   "instance": "/products",
   "code": "VALIDATION_FAILED",
-  "violations": [
-    { "path": "$.name", "invalidValue": "", "message": "must not be blank" },
-    { "path": "$.price", "invalidValue": "-1", "message": "must be greater than 0" }
+  "errors": [
+    { "path": "$.name", "invalidValue": "", "detail": "must not be blank" },
+    { "path": "$.price", "invalidValue": "-1", "detail": "must be greater than 0" }
   ],
   "traceId": "69fcf2db21f488679d633abb34871dbb"
 }
@@ -784,8 +814,8 @@ Each `violations` entry has:
 
 ### 10.2 Handling errors
 
-- **Use `code` in your logic, not the text.** `title`, `detail` and `message` can change and depend on the
-  language. Send `Accept-Language` to ask for a language; the API uses a default language if it isn't available.
+- **Use `code` in your logic, not the text.** `title` and `detail`, including those in `errors`, can change and
+  depend on the language. Send `Accept-Language` to ask for a language; the API uses a default language if it isn't available.
 - **Expect new codes.** An API can add its own codes, so fall back to the HTTP status for a code you don't
   recognise.
 - **Don't assume every error has this body.** 401 and 403 responses can be empty or use another format, and
@@ -814,11 +844,11 @@ that lists them.
 | The type name of an object is unknown           | `INVALID_TYPE_ID`        | 400    | `path`, `invalidValue`, `expectedType`                |
 | A number is too large or small for its type     | `INTEGER_OVERFLOW`       | 400    | `expectedType`, `validRange`, `line`, `column`        |
 
-**Validation.** Fix every entry in `violations` before sending the request again.
+**Validation.** Fix every entry in `errors` before sending the request again.
 
 | Situation                      | `code`              | Status | Extra fields |
 |--------------------------------|---------------------|--------|--------------|
-| One or more values are invalid | `VALIDATION_FAILED` | 422    | `violations` |
+| One or more values are invalid | `VALIDATION_FAILED` | 422    | `errors`     |
 
 **Request format.** Fix the request before sending it again.
 

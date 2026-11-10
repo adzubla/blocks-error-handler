@@ -38,36 +38,36 @@ class BindingFailureIT {
         mvc.perform(get("/test/binding/form").param("age", "abc"))
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations", hasSize(1)))
-                .andExpect(jsonPath("$.violations[0].path").value("$.age"))
-                .andExpect(jsonPath("$.violations[0].invalidValue").value("abc"))
-                .andExpect(jsonPath("$.violations[0].expectedType").value("integer (int32)"))
-                .andExpect(jsonPath("$.violations[0].message").value("Invalid value — expected integer (int32)"));
+                .andExpect(jsonPath("$.errors", hasSize(1)))
+                .andExpect(jsonPath("$.errors[0].path").value("$.age"))
+                .andExpect(jsonPath("$.errors[0].invalidValue").value("abc"))
+                .andExpect(jsonPath("$.errors[0].expectedType").value("integer (int32)"))
+                .andExpect(jsonPath("$.errors[0].detail").value("Invalid value — expected integer (int32)"));
     }
 
     @Test
     void bindingFailure_onADate_namesTheOpenApiFormat() throws Exception {
         mvc.perform(get("/test/binding/form").param("birthday", "yesterday"))
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.violations[0].path").value("$.birthday"))
-                .andExpect(jsonPath("$.violations[0].expectedType").value("string (date)"))
-                .andExpect(jsonPath("$.violations[0].message").value("Invalid value — expected string (date)"));
+                .andExpect(jsonPath("$.errors[0].path").value("$.birthday"))
+                .andExpect(jsonPath("$.errors[0].expectedType").value("string (date)"))
+                .andExpect(jsonPath("$.errors[0].detail").value("Invalid value — expected string (date)"));
     }
 
     @Test
     void bindingFailure_messageIsTranslated() throws Exception {
         mvc.perform(get("/test/binding/form").param("age", "abc").header("Accept-Language", "pt-BR"))
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.violations[0].message").value("Valor inválido — esperado integer (int32)"));
+                .andExpect(jsonPath("$.errors[0].detail").value("Valor inválido — esperado integer (int32)"));
     }
 
     @Test
     void constraintViolation_keepsItsOwnMessage() throws Exception {
         mvc.perform(get("/test/binding/form").param("age", "0"))
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.violations[0].path").value("$.age"))
-                .andExpect(jsonPath("$.violations[0].expectedType").doesNotExist())
-                .andExpect(jsonPath("$.violations[0].message").value("must be greater than or equal to 1"));
+                .andExpect(jsonPath("$.errors[0].path").value("$.age"))
+                .andExpect(jsonPath("$.errors[0].expectedType").doesNotExist())
+                .andExpect(jsonPath("$.errors[0].detail").value("must be greater than or equal to 1"));
     }
 
     public static class Form {

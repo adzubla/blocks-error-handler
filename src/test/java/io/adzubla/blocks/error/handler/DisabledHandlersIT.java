@@ -49,7 +49,7 @@ class DisabledHandlersIT {
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations").doesNotExist());
+                .andExpect(jsonPath("$.errors").doesNotExist());
     }
 
     @Test

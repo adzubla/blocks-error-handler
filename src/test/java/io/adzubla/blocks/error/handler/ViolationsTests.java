@@ -50,9 +50,9 @@ class ViolationsTests {
     @MethodSource("complexValues")
     void complexValue_isOmitted(Object value) {
         assertThat(violations.of("$.x", value, "bad"))
-                .containsOnlyKeys("path", "message")
+                .containsOnlyKeys("path", "detail")
                 .containsEntry("path", "$.x")
-                .containsEntry("message", "bad");
+                .containsEntry("detail", "bad");
     }
 
     @Test
@@ -65,7 +65,7 @@ class ViolationsTests {
             "$.pwd", "$.clientSecret", "$.accessToken", "$.api_key", "$.api-key", "$.apiKey", "$.private_key",
             "$.credentials.pin", "$.user.password", "$.attributes[token]", "$.passwords[1]"})
     void sensitivePath_omitsTheValue(String path) {
-        assertThat(violations.of(path, "hunter2", "bad")).containsOnlyKeys("path", "message");
+        assertThat(violations.of(path, "hunter2", "bad")).containsOnlyKeys("path", "detail");
     }
 
     @ParameterizedTest
@@ -76,15 +76,15 @@ class ViolationsTests {
 
     @Test
     void sensitiveNullValue_isOmittedToo() {
-        assertThat(violations.of("$.password", null, "bad")).containsOnlyKeys("path", "message");
+        assertThat(violations.of("$.password", null, "bad")).containsOnlyKeys("path", "detail");
     }
 
     @Test
     void configuredWords_areNormalizedLikeThePath() {
         var custom = new Violations(MESSAGES, List.of("Credit-Card"));
 
-        assertThat(custom.of("$.creditCard", "4111", "bad")).containsOnlyKeys("path", "message");
-        assertThat(custom.of("$.credit_card_number", "4111", "bad")).containsOnlyKeys("path", "message");
+        assertThat(custom.of("$.creditCard", "4111", "bad")).containsOnlyKeys("path", "detail");
+        assertThat(custom.of("$.credit_card_number", "4111", "bad")).containsOnlyKeys("path", "detail");
         assertThat(custom.of("$.password", "x", "bad")).containsEntry("invalidValue", "x");
     }
 
@@ -104,7 +104,7 @@ class ViolationsTests {
         assertThat(violations.of("$", error))
                 .containsEntry("invalidValue", "abc")
                 .containsEntry("expectedType", "integer (int32)")
-                .containsEntry("message", "Invalid value — expected integer (int32)");
+                .containsEntry("detail", "Invalid value — expected integer (int32)");
     }
 
     @Test
@@ -115,7 +115,7 @@ class ViolationsTests {
         assertThat(violations.of("$", error))
                 .containsEntry("path", "$.age")
                 .containsEntry("invalidValue", "abc")
-                .containsEntry("message", "Invalid value");
+                .containsEntry("detail", "Invalid value");
     }
 
     @Test

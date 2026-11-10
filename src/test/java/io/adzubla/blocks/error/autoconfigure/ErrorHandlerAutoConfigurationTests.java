@@ -6,6 +6,7 @@ import io.adzubla.blocks.error.handler.DataExceptionProperties;
 import io.adzubla.blocks.error.handler.GlobalExceptionHandler;
 import io.adzubla.blocks.error.handler.JpaExceptionHandler;
 import io.adzubla.blocks.error.handler.JsonExceptionHandler;
+import io.adzubla.blocks.error.handler.ProblemTypeAdvice;
 import io.adzubla.blocks.error.handler.SpringDataExceptionHandler;
 import io.adzubla.blocks.error.handler.ValidationExceptionHandler;
 import io.adzubla.blocks.error.trace.ProblemDetailTraceAdvice;
@@ -46,7 +47,15 @@ class ErrorHandlerAutoConfigurationTests {
     @Test
     void masterSwitchDisablesEverything() {
         runner.withPropertyValues("blocks.error.enabled=false")
-                .run(context -> HANDLERS.forEach(type -> assertThat(context).doesNotHaveBean(type)));
+                .run(context -> {
+                    HANDLERS.forEach(type -> assertThat(context).doesNotHaveBean(type));
+                    assertThat(context).doesNotHaveBean(ProblemTypeAdvice.class);
+                });
+    }
+
+    @Test
+    void registersProblemTypeAdviceByDefault() {
+        runner.run(context -> assertThat(context).hasSingleBean(ProblemTypeAdvice.class));
     }
 
     @Test

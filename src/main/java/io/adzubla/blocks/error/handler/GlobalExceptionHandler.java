@@ -262,8 +262,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         if (ex instanceof HttpMediaTypeNotAcceptableException) {
             return ErrorCode.NOT_ACCEPTABLE.name();
         }
-        if (ex instanceof MissingPathVariableException) {
-            return ErrorCode.MISSING_PATH_VARIABLE.name();
+        if (ex instanceof MissingPathVariableException mpve) {
+            // Present but converted to null, such as a blank UUID, is the client's fault and a 400;
+            // only a variable missing from the mapping is the server's 500 MISSING_PATH_VARIABLE.
+            return mpve.isMissingAfterConversion()
+                    ? ErrorCode.REQUEST_BINDING_ERROR.name() : ErrorCode.MISSING_PATH_VARIABLE.name();
         }
         if (ex instanceof MissingServletRequestParameterException) {
             return ErrorCode.MISSING_REQUEST_PARAMETER.name();

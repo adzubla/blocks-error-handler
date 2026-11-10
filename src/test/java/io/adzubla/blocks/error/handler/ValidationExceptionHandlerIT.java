@@ -76,7 +76,7 @@ class ValidationExceptionHandlerIT {
                 .andDo(print())
                 .andExpect(status().isCreated())
                 .andExpect(header().exists("X-Trace-Id"))
-                .andExpect(jsonPath("$.violations").doesNotExist());
+                .andExpect(jsonPath("$.errors").doesNotExist());
     }
 
     @Test
@@ -134,8 +134,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.title").value("Validation failed"))
-                .andExpect(jsonPath("$.violations").isArray())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.name')]").exists())
+                .andExpect(jsonPath("$.errors").isArray())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.name')]").exists())
                 .andExpect(jsonPath("$.traceId").isString());
     }
 
@@ -150,7 +150,7 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.price')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.price')]").exists())
                 .andExpect(jsonPath("$.traceId").isString());
     }
 
@@ -166,8 +166,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.name')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.name')].message").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.name')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.name')].detail").exists())
                 .andExpect(jsonPath("$.traceId").isString());
     }
 
@@ -182,7 +182,7 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.address.street')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.address.street')]").exists())
                 .andExpect(jsonPath("$.traceId").isString());
     }
 
@@ -197,8 +197,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.address.street')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.address.city')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.address.street')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.address.city')]").exists())
                 .andExpect(jsonPath("$.traceId").isString());
     }
 
@@ -216,8 +216,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.title").value("Validation failed"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.price')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.stock')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.price')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.stock')]").exists())
                 .andExpect(jsonPath("$.traceId").isString());
     }
 
@@ -232,8 +232,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations").isArray())
-                .andExpect(jsonPath("$.violations.length()").value(Matchers.greaterThanOrEqualTo(3)))
+                .andExpect(jsonPath("$.errors").isArray())
+                .andExpect(jsonPath("$.errors.length()").value(Matchers.greaterThanOrEqualTo(3)))
                 .andExpect(jsonPath("$.traceId").isString());
     }
 
@@ -250,7 +250,7 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.name')].invalidValue",
+                .andExpect(jsonPath("$.errors[?(@.path=='$.name')].invalidValue",
                         hasItem("")))
                 .andExpect(jsonPath("$.traceId").isString());
     }
@@ -266,7 +266,7 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.price')].invalidValue",
+                .andExpect(jsonPath("$.errors[?(@.path=='$.price')].invalidValue",
                         hasItem(Matchers.nullValue())))
                 .andExpect(jsonPath("$.traceId").isString());
     }
@@ -280,9 +280,9 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations").isArray())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.id')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.id')].invalidValue", hasItem("-1")))
+                .andExpect(jsonPath("$.errors").isArray())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.id')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.id')].invalidValue", hasItem("-1")))
                 .andExpect(jsonPath("$.traceId").isString());
     }
 
@@ -292,9 +292,9 @@ class ValidationExceptionHandlerIT {
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations.length()").value(1))
-                .andExpect(jsonPath("$.violations[0].path").value("$.tags[1]"))
-                .andExpect(jsonPath("$.violations[0].invalidValue").value(""));
+                .andExpect(jsonPath("$.errors.length()").value(1))
+                .andExpect(jsonPath("$.errors[0].path").value("$.tags[1]"))
+                .andExpect(jsonPath("$.errors[0].invalidValue").value(""));
     }
 
     @Test
@@ -305,9 +305,9 @@ class ValidationExceptionHandlerIT {
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations.length()").value(1))
-                .andExpect(jsonPath("$.violations[0].path").value("$"))
-                .andExpect(jsonPath("$.violations[0].message").value("min must not exceed max"));
+                .andExpect(jsonPath("$.errors.length()").value(1))
+                .andExpect(jsonPath("$.errors[0].path").value("$"))
+                .andExpect(jsonPath("$.errors[0].detail").value("min must not exceed max"));
     }
 
     @Test
@@ -317,8 +317,8 @@ class ValidationExceptionHandlerIT {
                         .content("{\"name\":\"\"}"))
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.name')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.page')].invalidValue", hasItem("0")));
+                .andExpect(jsonPath("$.errors[?(@.path=='$.name')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.page')].invalidValue", hasItem("0")));
     }
 
     @Test
@@ -329,10 +329,10 @@ class ValidationExceptionHandlerIT {
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations.length()").value(1))
-                .andExpect(jsonPath("$.violations[0].path").value("$"))
-                .andExpect(jsonPath("$.violations[0].message").value("min must not exceed max"))
-                .andExpect(jsonPath("$.violations[0].invalidValue").doesNotExist());
+                .andExpect(jsonPath("$.errors.length()").value(1))
+                .andExpect(jsonPath("$.errors[0].path").value("$"))
+                .andExpect(jsonPath("$.errors[0].detail").value("min must not exceed max"))
+                .andExpect(jsonPath("$.errors[0].invalidValue").doesNotExist());
     }
 
     // --- object-level constraints never echo the object ---
@@ -344,9 +344,9 @@ class ValidationExceptionHandlerIT {
                         .content("{\"range\":{\"min\":5,\"max\":1}}"))
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.violations.length()").value(1))
-                .andExpect(jsonPath("$.violations[0].path").value("$.range"))
-                .andExpect(jsonPath("$.violations[0].invalidValue").doesNotHaveJsonPath());
+                .andExpect(jsonPath("$.errors.length()").value(1))
+                .andExpect(jsonPath("$.errors[0].path").value("$.range"))
+                .andExpect(jsonPath("$.errors[0].invalidValue").doesNotHaveJsonPath());
     }
 
     @Test
@@ -356,10 +356,10 @@ class ValidationExceptionHandlerIT {
                         .content("{\"range\":{\"min\":5,\"max\":1}}"))
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.violations.length()").value(2))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.range')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.range')].invalidValue").isEmpty())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.page')].invalidValue", hasItem("0")));
+                .andExpect(jsonPath("$.errors.length()").value(2))
+                .andExpect(jsonPath("$.errors[?(@.path=='$.range')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.range')].invalidValue").isEmpty())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.page')].invalidValue", hasItem("0")));
     }
 
     @Test
@@ -368,10 +368,10 @@ class ValidationExceptionHandlerIT {
                         .param("min", "5").param("max", "1").param("page", "0"))
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.violations.length()").value(2))
-                .andExpect(jsonPath("$.violations[?(@.path=='$')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$')].invalidValue").isEmpty())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.page')]").exists());
+                .andExpect(jsonPath("$.errors.length()").value(2))
+                .andExpect(jsonPath("$.errors[?(@.path=='$')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$')].invalidValue").isEmpty())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.page')]").exists());
     }
 
     // Spring only raises an exception when a parameter has a violation. Documented in the README.
@@ -388,10 +388,10 @@ class ValidationExceptionHandlerIT {
         mvc.perform(post("/test/constraint-violation/service-range"))
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.violations.length()").value(1))
-                .andExpect(jsonPath("$.violations[0].path").value("$"))
-                .andExpect(jsonPath("$.violations[0].message").value("min must not exceed max"))
-                .andExpect(jsonPath("$.violations[0].invalidValue").doesNotHaveJsonPath());
+                .andExpect(jsonPath("$.errors.length()").value(1))
+                .andExpect(jsonPath("$.errors[0].path").value("$"))
+                .andExpect(jsonPath("$.errors[0].detail").value("min must not exceed max"))
+                .andExpect(jsonPath("$.errors[0].invalidValue").doesNotHaveJsonPath());
     }
 
     @Test
@@ -399,8 +399,8 @@ class ValidationExceptionHandlerIT {
         mvc.perform(post("/test/constraint-violation/service-box"))
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.violations[0].path").value("$.range"))
-                .andExpect(jsonPath("$.violations[0].invalidValue").doesNotHaveJsonPath());
+                .andExpect(jsonPath("$.errors[0].path").value("$.range"))
+                .andExpect(jsonPath("$.errors[0].invalidValue").doesNotHaveJsonPath());
     }
 
     @Test
@@ -408,8 +408,8 @@ class ValidationExceptionHandlerIT {
         mvc.perform(post("/test/constraint-violation/service-ranges"))
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.violations[0].path").value("$[1]"))
-                .andExpect(jsonPath("$.violations[0].invalidValue").doesNotHaveJsonPath());
+                .andExpect(jsonPath("$.errors[0].path").value("$[1]"))
+                .andExpect(jsonPath("$.errors[0].invalidValue").doesNotHaveJsonPath());
     }
 
     @Test
@@ -417,10 +417,10 @@ class ValidationExceptionHandlerIT {
         mvc.perform(post("/test/constraint-violation/service-cross"))
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.violations.length()").value(1))
-                .andExpect(jsonPath("$.violations[0].path").value("$"))
-                .andExpect(jsonPath("$.violations[0].message").value("arguments out of order"))
-                .andExpect(jsonPath("$.violations[0].invalidValue").doesNotHaveJsonPath());
+                .andExpect(jsonPath("$.errors.length()").value(1))
+                .andExpect(jsonPath("$.errors[0].path").value("$"))
+                .andExpect(jsonPath("$.errors[0].detail").value("arguments out of order"))
+                .andExpect(jsonPath("$.errors[0].invalidValue").doesNotHaveJsonPath());
     }
 
     @Test
@@ -428,8 +428,8 @@ class ValidationExceptionHandlerIT {
         mvc.perform(post("/test/constraint-violation/direct-range"))
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.violations[0].path").value("$"))
-                .andExpect(jsonPath("$.violations[0].invalidValue").doesNotHaveJsonPath());
+                .andExpect(jsonPath("$.errors[0].path").value("$"))
+                .andExpect(jsonPath("$.errors[0].invalidValue").doesNotHaveJsonPath());
     }
 
     // --- sensitive fields never echo the value ---
@@ -442,10 +442,10 @@ class ValidationExceptionHandlerIT {
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(content().string(Matchers.not(containsString("hunter2"))))
-                .andExpect(jsonPath("$.violations.length()").value(2))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.password')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.password')].invalidValue").isEmpty())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.name')].invalidValue", hasItem("toolong")));
+                .andExpect(jsonPath("$.errors.length()").value(2))
+                .andExpect(jsonPath("$.errors[?(@.path=='$.password')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.password')].invalidValue").isEmpty())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.name')].invalidValue", hasItem("toolong")));
     }
 
     @Test
@@ -456,7 +456,7 @@ class ValidationExceptionHandlerIT {
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(content().string(Matchers.not(containsString("hunter2"))))
-                .andExpect(jsonPath("$.violations[0].path").value("$.password"));
+                .andExpect(jsonPath("$.errors[0].path").value("$.password"));
     }
 
     @Test
@@ -465,7 +465,7 @@ class ValidationExceptionHandlerIT {
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(content().string(Matchers.not(containsString("hunter2"))))
-                .andExpect(jsonPath("$.violations[0].path").value("$.accessToken"));
+                .andExpect(jsonPath("$.errors[0].path").value("$.accessToken"));
     }
 
     @Test
@@ -474,7 +474,7 @@ class ValidationExceptionHandlerIT {
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(content().string(Matchers.not(containsString("hunter2"))))
-                .andExpect(jsonPath("$.violations[0].path").value("$.password"));
+                .andExpect(jsonPath("$.errors[0].path").value("$.password"));
     }
 
     @Test
@@ -483,7 +483,7 @@ class ValidationExceptionHandlerIT {
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(content().string(Matchers.not(containsString("hunter2"))))
-                .andExpect(jsonPath("$.violations[0].path").value("$.apiKey"));
+                .andExpect(jsonPath("$.errors[0].path").value("$.apiKey"));
     }
 
     // --- field-level constraints on complex values never echo the value ---
@@ -496,9 +496,9 @@ class ValidationExceptionHandlerIT {
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(content().string(Matchers.not(containsString("hunter"))))
-                .andExpect(jsonPath("$.violations.length()").value(1))
-                .andExpect(jsonPath("$.violations[0].path").value("$.items"))
-                .andExpect(jsonPath("$.violations[0].invalidValue").doesNotHaveJsonPath());
+                .andExpect(jsonPath("$.errors.length()").value(1))
+                .andExpect(jsonPath("$.errors[0].path").value("$.items"))
+                .andExpect(jsonPath("$.errors[0].invalidValue").doesNotHaveJsonPath());
     }
 
     @Test
@@ -509,8 +509,8 @@ class ValidationExceptionHandlerIT {
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(content().string(Matchers.not(containsString("hunter"))))
-                .andExpect(jsonPath("$.violations[0].path").value("$.items"))
-                .andExpect(jsonPath("$.violations[0].invalidValue").doesNotHaveJsonPath());
+                .andExpect(jsonPath("$.errors[0].path").value("$.items"))
+                .andExpect(jsonPath("$.errors[0].invalidValue").doesNotHaveJsonPath());
     }
 
     @Test
@@ -519,8 +519,8 @@ class ValidationExceptionHandlerIT {
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(content().string(Matchers.not(containsString("hunter"))))
-                .andExpect(jsonPath("$.violations[0].path").value("$.tags"))
-                .andExpect(jsonPath("$.violations[0].invalidValue").doesNotHaveJsonPath());
+                .andExpect(jsonPath("$.errors[0].path").value("$.tags"))
+                .andExpect(jsonPath("$.errors[0].invalidValue").doesNotHaveJsonPath());
     }
 
     @Test
@@ -529,8 +529,8 @@ class ValidationExceptionHandlerIT {
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(content().string(Matchers.not(containsString("hunter"))))
-                .andExpect(jsonPath("$.violations[0].path").value("$.items"))
-                .andExpect(jsonPath("$.violations[0].invalidValue").doesNotHaveJsonPath());
+                .andExpect(jsonPath("$.errors[0].path").value("$.items"))
+                .andExpect(jsonPath("$.errors[0].invalidValue").doesNotHaveJsonPath());
     }
 
     @Test
@@ -540,9 +540,9 @@ class ValidationExceptionHandlerIT {
                         .content("{\"items\":null}"))
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.violations[0].path").value("$.items"))
-                .andExpect(jsonPath("$.violations[0].invalidValue").hasJsonPath())
-                .andExpect(jsonPath("$.violations[0].invalidValue").value(Matchers.nullValue()));
+                .andExpect(jsonPath("$.errors[0].path").value("$.items"))
+                .andExpect(jsonPath("$.errors[0].invalidValue").hasJsonPath())
+                .andExpect(jsonPath("$.errors[0].invalidValue").value(Matchers.nullValue()));
     }
 
     @Test
@@ -550,7 +550,7 @@ class ValidationExceptionHandlerIT {
         mvc.perform(post("/test/constraint-violation/bundle-message"))
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.violations[0].message").value("Widget not found"));
+                .andExpect(jsonPath("$.errors[0].detail").value("Widget not found"));
     }
 
     @Test
@@ -559,7 +559,7 @@ class ValidationExceptionHandlerIT {
                 .andDo(print())
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"))
-                .andExpect(jsonPath("$.violations").doesNotExist());
+                .andExpect(jsonPath("$.errors").doesNotExist());
     }
 
     // --- ConstraintViolationException (@Validated on a non-controller bean) ---
@@ -572,8 +572,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.title").value("Validation failed"))
-                .andExpect(jsonPath("$.violations").isArray())
-                .andExpect(jsonPath("$.violations[0].path").value("$.value"))
+                .andExpect(jsonPath("$.errors").isArray())
+                .andExpect(jsonPath("$.errors[0].path").value("$.value"))
                 .andExpect(jsonPath("$.traceId").isString());
     }
 
@@ -583,7 +583,7 @@ class ValidationExceptionHandlerIT {
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[0].path").value("$.name"));
+                .andExpect(jsonPath("$.errors[0].path").value("$.name"));
     }
 
     @Test
@@ -592,7 +592,7 @@ class ValidationExceptionHandlerIT {
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[0].path").value("$.items[1]"));
+                .andExpect(jsonPath("$.errors[0].path").value("$.items[1]"));
     }
 
     @Test
@@ -601,7 +601,7 @@ class ValidationExceptionHandlerIT {
                 .andDo(print())
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"))
-                .andExpect(jsonPath("$.violations").doesNotExist())
+                .andExpect(jsonPath("$.errors").doesNotExist())
                 .andExpect(jsonPath("$.traceId").isString());
     }
 
@@ -611,7 +611,7 @@ class ValidationExceptionHandlerIT {
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations").isEmpty());
+                .andExpect(jsonPath("$.errors").isEmpty());
     }
 
     // --- i18n ---
@@ -650,8 +650,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.assertFalseField')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.assertFalseField')].message",
+                .andExpect(jsonPath("$.errors[?(@.path=='$.assertFalseField')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.assertFalseField')].detail",
                         hasItem(containsString("false"))))
                 .andExpect(jsonPath("$.traceId").isString());
     }
@@ -665,8 +665,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.assertTrueField')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.assertTrueField')].message",
+                .andExpect(jsonPath("$.errors[?(@.path=='$.assertTrueField')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.assertTrueField')].detail",
                         hasItem(containsString("true"))))
                 .andExpect(jsonPath("$.traceId").isString());
     }
@@ -680,8 +680,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.decimalMaxField')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.decimalMaxField')].message",
+                .andExpect(jsonPath("$.errors[?(@.path=='$.decimalMaxField')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.decimalMaxField')].detail",
                         hasItem(containsString("99.99"))))
                 .andExpect(jsonPath("$.traceId").isString());
     }
@@ -695,8 +695,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.decimalMinField')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.decimalMinField')].message",
+                .andExpect(jsonPath("$.errors[?(@.path=='$.decimalMinField')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.decimalMinField')].detail",
                         hasItem(containsString("1.00"))))
                 .andExpect(jsonPath("$.traceId").isString());
     }
@@ -710,8 +710,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.digitsField')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.digitsField')].message",
+                .andExpect(jsonPath("$.errors[?(@.path=='$.digitsField')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.digitsField')].detail",
                         hasItem(containsString("<3 digits>.<2 digits>"))))
                 .andExpect(jsonPath("$.traceId").isString());
     }
@@ -725,8 +725,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.emailField')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.emailField')].message",
+                .andExpect(jsonPath("$.errors[?(@.path=='$.emailField')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.emailField')].detail",
                         hasItem(containsString("email"))))
                 .andExpect(jsonPath("$.traceId").isString());
     }
@@ -740,8 +740,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.futureField')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.futureField')].message",
+                .andExpect(jsonPath("$.errors[?(@.path=='$.futureField')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.futureField')].detail",
                         hasItem(containsString("future"))))
                 .andExpect(jsonPath("$.traceId").isString());
     }
@@ -755,8 +755,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.futureOrPresentField')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.futureOrPresentField')].message",
+                .andExpect(jsonPath("$.errors[?(@.path=='$.futureOrPresentField')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.futureOrPresentField')].detail",
                         hasItem(containsString("future"))))
                 .andExpect(jsonPath("$.traceId").isString());
     }
@@ -770,8 +770,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.maxField')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.maxField')].message",
+                .andExpect(jsonPath("$.errors[?(@.path=='$.maxField')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.maxField')].detail",
                         hasItem(containsString("100"))))
                 .andExpect(jsonPath("$.traceId").isString());
     }
@@ -785,8 +785,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.minField')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.minField')].message",
+                .andExpect(jsonPath("$.errors[?(@.path=='$.minField')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.minField')].detail",
                         hasItem(containsString("10"))))
                 .andExpect(jsonPath("$.traceId").isString());
     }
@@ -800,8 +800,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.negativeField')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.negativeField')].message",
+                .andExpect(jsonPath("$.errors[?(@.path=='$.negativeField')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.negativeField')].detail",
                         hasItem(containsString("0"))))
                 .andExpect(jsonPath("$.traceId").isString());
     }
@@ -815,8 +815,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.negativeOrZeroField')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.negativeOrZeroField')].message",
+                .andExpect(jsonPath("$.errors[?(@.path=='$.negativeOrZeroField')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.negativeOrZeroField')].detail",
                         hasItem(containsString("0"))))
                 .andExpect(jsonPath("$.traceId").isString());
     }
@@ -830,8 +830,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.notBlankField')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.notBlankField')].message",
+                .andExpect(jsonPath("$.errors[?(@.path=='$.notBlankField')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.notBlankField')].detail",
                         hasItem(containsString("blank"))))
                 .andExpect(jsonPath("$.traceId").isString());
     }
@@ -845,8 +845,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.notEmptyField')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.notEmptyField')].message",
+                .andExpect(jsonPath("$.errors[?(@.path=='$.notEmptyField')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.notEmptyField')].detail",
                         hasItem(containsString("empty"))))
                 .andExpect(jsonPath("$.traceId").isString());
     }
@@ -860,8 +860,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.notNullField')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.notNullField')].message",
+                .andExpect(jsonPath("$.errors[?(@.path=='$.notNullField')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.notNullField')].detail",
                         hasItem(containsString("null"))))
                 .andExpect(jsonPath("$.traceId").isString());
     }
@@ -875,8 +875,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.nullField')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.nullField')].message",
+                .andExpect(jsonPath("$.errors[?(@.path=='$.nullField')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.nullField')].detail",
                         hasItem(containsString("null"))))
                 .andExpect(jsonPath("$.traceId").isString());
     }
@@ -890,8 +890,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.pastField')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.pastField')].message",
+                .andExpect(jsonPath("$.errors[?(@.path=='$.pastField')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.pastField')].detail",
                         hasItem(containsString("past"))))
                 .andExpect(jsonPath("$.traceId").isString());
     }
@@ -905,8 +905,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.pastOrPresentField')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.pastOrPresentField')].message",
+                .andExpect(jsonPath("$.errors[?(@.path=='$.pastOrPresentField')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.pastOrPresentField')].detail",
                         hasItem(containsString("past"))))
                 .andExpect(jsonPath("$.traceId").isString());
     }
@@ -920,8 +920,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.patternField')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.patternField')].message",
+                .andExpect(jsonPath("$.errors[?(@.path=='$.patternField')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.patternField')].detail",
                         hasItem(containsString("[A-Z]{2}-"))))
                 .andExpect(jsonPath("$.traceId").isString());
     }
@@ -935,8 +935,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.positiveField')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.positiveField')].message",
+                .andExpect(jsonPath("$.errors[?(@.path=='$.positiveField')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.positiveField')].detail",
                         hasItem(containsString("0"))))
                 .andExpect(jsonPath("$.traceId").isString());
     }
@@ -950,8 +950,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.positiveOrZeroField')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.positiveOrZeroField')].message",
+                .andExpect(jsonPath("$.errors[?(@.path=='$.positiveOrZeroField')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.positiveOrZeroField')].detail",
                         hasItem(containsString("0"))))
                 .andExpect(jsonPath("$.traceId").isString());
     }
@@ -965,8 +965,8 @@ class ValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[?(@.path=='$.sizeField')]").exists())
-                .andExpect(jsonPath("$.violations[?(@.path=='$.sizeField')].message",
+                .andExpect(jsonPath("$.errors[?(@.path=='$.sizeField')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.path=='$.sizeField')].detail",
                         hasItem(Matchers.allOf(containsString("2"), containsString("8")))))
                 .andExpect(jsonPath("$.traceId").isString());
     }

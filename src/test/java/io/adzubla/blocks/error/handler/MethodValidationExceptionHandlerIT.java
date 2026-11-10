@@ -55,9 +55,9 @@ class MethodValidationExceptionHandlerIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations.length()").value(1))
-                .andExpect(jsonPath("$.violations[0].path").value("$.value"))
-                .andExpect(jsonPath("$.violations[0].invalidValue").value(""));
+                .andExpect(jsonPath("$.errors.length()").value(1))
+                .andExpect(jsonPath("$.errors[0].path").value("$.value"))
+                .andExpect(jsonPath("$.errors[0].invalidValue").value(""));
     }
 
     @Test
@@ -66,7 +66,7 @@ class MethodValidationExceptionHandlerIT {
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.violations[0].path").value("$.name"));
+                .andExpect(jsonPath("$.errors[0].path").value("$.name"));
     }
 
     @Test
@@ -74,7 +74,7 @@ class MethodValidationExceptionHandlerIT {
         mvc.perform(post("/test/method-validation/list"))
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.violations[0].path").value("$.items[1]"));
+                .andExpect(jsonPath("$.errors[0].path").value("$.items[1]"));
     }
 
     @Test
@@ -83,7 +83,7 @@ class MethodValidationExceptionHandlerIT {
                 .andDo(print())
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"))
-                .andExpect(jsonPath("$.violations").doesNotExist());
+                .andExpect(jsonPath("$.errors").doesNotExist());
     }
 
     @Test
@@ -91,8 +91,8 @@ class MethodValidationExceptionHandlerIT {
         mvc.perform(post("/test/method-validation/box"))
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.violations[0].path").value("$.locked"))
-                .andExpect(jsonPath("$.violations[0].invalidValue").doesNotHaveJsonPath());
+                .andExpect(jsonPath("$.errors[0].path").value("$.locked"))
+                .andExpect(jsonPath("$.errors[0].invalidValue").doesNotHaveJsonPath());
     }
 
     @Test
@@ -100,8 +100,8 @@ class MethodValidationExceptionHandlerIT {
         mvc.perform(post("/test/method-validation/secret"))
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.violations[0].path").value("$.clientSecret"))
-                .andExpect(jsonPath("$.violations[0].invalidValue").doesNotHaveJsonPath());
+                .andExpect(jsonPath("$.errors[0].path").value("$.clientSecret"))
+                .andExpect(jsonPath("$.errors[0].invalidValue").doesNotHaveJsonPath());
     }
 
     // Spring only raises an exception when a parameter has a violation. Documented in the README.

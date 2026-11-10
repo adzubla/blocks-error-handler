@@ -41,7 +41,8 @@ import java.util.Map;
  * {@link ConstraintViolationExceptionHandler}, which is only registered when Bean Validation is on
  * the classpath.
  *
- * <p>Every violation is mapped to a {@code violations} array entry with:
+ * <p>Every violation is mapped to an entry of the {@code errors} array, named and shaped after the
+ * RFC 9457 example, with:
  * <ul>
  *   <li>{@code path} — JSONPath notation (e.g. {@code $.address.street}); {@code $} for a
  *       constraint on the request object as a whole
@@ -49,7 +50,7 @@ import java.util.Map;
  *       value is {@code null}; absent for a complex value such as a collection or an object, for
  *       an object-level or cross-parameter constraint, and for a sensitive field (see
  *       {@link ValidationExceptionProperties})
- *   <li>{@code message} — the constraint violation message
+ *   <li>{@code detail} — the constraint violation message
  *   <li>{@code expectedType} — only for a value that can't be converted to the field's type: the
  *       expected type, named as in an OpenAPI schema
  * </ul>
@@ -129,7 +130,7 @@ public class ValidationExceptionHandler {
                 messages.get("error.validation-failed.detail"));
         problem.setTitle(messages.get("error.validation-failed.title"));
         problem.setProperty("code", ErrorCode.VALIDATION_FAILED.name());
-        problem.setProperty("violations", violations);
+        problem.setProperty("errors", violations);
         return ResponseEntity.unprocessableContent().body(problem);
     }
 }

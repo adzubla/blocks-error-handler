@@ -23,7 +23,7 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Builds the entries of the {@code violations} array shared by the validation handlers.
+ * Builds the entries of the {@code errors} array shared by the validation handlers.
  *
  * <p>{@code invalidValue} follows one convention across the library: the value as a string when it
  * is a simple value (a string, number, boolean, date, enum and the like, see
@@ -36,7 +36,7 @@ import java.util.Map;
  * sensitive words (see {@link ValidationExceptionProperties#getSensitiveFields()}). The whole path
  * is checked, so {@code $.credentials.pin} and a map key in {@code $.attributes[token]} count too.
  *
- * <p>{@code message} is the constraint's message, except for a binding failure (a value that can't
+ * <p>{@code detail} is the constraint's message, except for a binding failure (a value that can't
  * be converted to the field's type), which gets a generic message instead of the conversion error,
  * and an {@code expectedType} named as in an OpenAPI schema (see {@link OpenApiTypes}).
  */
@@ -96,7 +96,7 @@ final class Violations {
     }
 
     private static String summary(Map<String, String> violation) {
-        var summary = violation.get("path") + ": " + violation.get("message");
+        var summary = violation.get("path") + ": " + violation.get("detail");
         if (!violation.containsKey("invalidValue")) {
             return summary;
         }
@@ -111,7 +111,7 @@ final class Violations {
         var violation = new LinkedHashMap<String, String>();
         violation.put("path", path);
         violation.put("invalidValue", invalidValue != null ? String.valueOf(invalidValue) : null);
-        violation.put("message", message != null ? message : "");
+        violation.put("detail", message != null ? message : "");
         return violation;
     }
 
@@ -127,7 +127,7 @@ final class Violations {
     private static Map<String, String> withoutValue(String path, String message) {
         var violation = new LinkedHashMap<String, String>();
         violation.put("path", path);
-        violation.put("message", message != null ? message : "");
+        violation.put("detail", message != null ? message : "");
         return violation;
     }
 
