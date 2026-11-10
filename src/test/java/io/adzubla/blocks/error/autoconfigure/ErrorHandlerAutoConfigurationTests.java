@@ -93,6 +93,16 @@ class ErrorHandlerAutoConfigurationTests {
     }
 
     @Test
+    void jsonHandlerBacksOffWithoutJackson() {
+        runner.withClassLoader(new FilteredClassLoader("tools.jackson."))
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).doesNotHaveBean(JsonExceptionHandler.class);
+                    assertThat(context).hasSingleBean(GlobalExceptionHandler.class);
+                });
+    }
+
+    @Test
     void optionalHandlersBackOffWithoutTheirDependency() {
         runner.withClassLoader(new FilteredClassLoader(
                         "jakarta.validation.", "jakarta.persistence.", "io.micrometer.tracing.",

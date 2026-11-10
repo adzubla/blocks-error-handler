@@ -46,14 +46,6 @@ public class ErrorHandlerAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnBooleanProperty(name = "blocks.error.json.enabled", matchIfMissing = true)
-    JsonExceptionHandler jsonExceptionHandler(MessageSource messageSource,
-                                              ObjectProvider<JsonMapper> jsonMapper) {
-        return new JsonExceptionHandler(messageSource, jsonMapper.getIfUnique(JsonMapper::shared));
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
     @ConditionalOnBooleanProperty(name = "blocks.error.validation.enabled", matchIfMissing = true)
     ValidationExceptionHandler validationExceptionHandler(MessageSource messageSource,
                                                           ValidationExceptionProperties properties) {
@@ -70,6 +62,21 @@ public class ErrorHandlerAutoConfiguration {
 
     // Separate configuration classes, so the bean methods (whose signatures name optional types) are
     // only introspected when the optional dependency is on the classpath.
+
+    // Jackson 3 comes with spring-boot-starter-webmvc, but an application can exclude it for another
+    // JSON library.
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = "tools.jackson.databind.json.JsonMapper")
+    static class JacksonConfiguration {
+
+        @Bean
+        @ConditionalOnMissingBean
+        @ConditionalOnBooleanProperty(name = "blocks.error.json.enabled", matchIfMissing = true)
+        JsonExceptionHandler jsonExceptionHandler(MessageSource messageSource,
+                                                  ObjectProvider<JsonMapper> jsonMapper) {
+            return new JsonExceptionHandler(messageSource, jsonMapper.getIfUnique(JsonMapper::shared));
+        }
+    }
 
     // spring-tx (org.springframework.dao) comes with spring-jdbc / JPA / Spring Data, not with
     // spring-webmvc: an application without data access has no DataAccessException to handle.

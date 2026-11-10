@@ -33,8 +33,9 @@ import java.util.Set;
  * added to error responses (status 400+).
  *
  * <p>Because the decision depends on the status, the response is wrapped and the header is added
- * lazily, while headers can still be written: when the status is set via {@code setStatus} or
- * {@code sendError}, when the body stream or writer is first obtained, on {@code flushBuffer}, and
+ * lazily, while headers can still be written: when the status is set via {@code setStatus},
+ * {@code sendError} or {@code sendRedirect}, when the body stream or writer is first obtained, on
+ * {@code flushBuffer}, and
  * once the chain returns. An exception escaping the chain counts as a 500. A header already added
  * cannot be taken back, so a status changed afterwards is not reconsidered. A request that went
  * async is not decided when the chain returns, as its status is only known once it completes.
@@ -129,6 +130,38 @@ public class TraceIdResponseHeaderFilter extends OncePerRequestFilter {
         public void sendError(int sc, String msg) throws IOException {
             addIfApplicable(sc);
             super.sendError(sc, msg);
+        }
+
+        // A redirect sets its status and commits on the wrapped response, past setStatus above.
+        @Override
+        public void sendRedirect(String location) throws IOException {
+            addIfApplicable(SC_FOUND);
+            super.sendRedirect(location);
+        }
+
+        @Override
+        public void sendRedirect(String location, int sc) throws IOException {
+            addIfApplicable(sc);
+            super.sendRedirect(location, sc);
+        }
+
+        @Override
+        public void sendRedirect(String location, boolean clearBuffer) throws IOException {
+            addIfApplicable(SC_FOUND);
+            super.sendRedirect(location, clearBuffer);
+        }
+
+        @Override
+        public void sendRedirect(String location, int sc, boolean clearBuffer) throws IOException {
+            addIfApplicable(sc);
+            super.sendRedirect(location, sc, clearBuffer);
+        }
+
+        // A reset clears the headers, this one included: decide again for what is written next.
+        @Override
+        public void reset() {
+            super.reset();
+            added = false;
         }
 
         @Override
