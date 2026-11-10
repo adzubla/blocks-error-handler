@@ -30,6 +30,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
@@ -48,7 +49,8 @@ import java.util.stream.Stream;
  * <p>Extends {@link ResponseEntityExceptionHandler} to handle the full set of standard Spring MVC
  * exceptions (method-not-allowed, unsupported media type, missing parameters, etc.), enriching
  * every {@link org.springframework.http.ProblemDetail} body produced by
- * {@link #handleExceptionInternal} with a stable {@link ErrorCode} string.
+ * {@link #handleExceptionInternal} with a stable {@link ErrorCode} string. A parameter of the wrong
+ * type and a missing required parameter also get {@code path} and {@code expectedType}.
  *
  * <p>Validation failures that reach this handler — only when {@link ValidationExceptionHandler} is
  * disabled or replaced — are answered with 422, matching their {@code VALIDATION_FAILED} code,
@@ -84,10 +86,65 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     private final MessageSource messageSource;
     private final ErrorMessages messages;
+    private final Violations values;
 
+    /**
+     * Uses the default sensitive fields; prefer
+     * {@link #GlobalExceptionHandler(MessageSource, ValidationExceptionProperties)}.
+     */
     public GlobalExceptionHandler(MessageSource messageSource) {
+        this(messageSource, new ValidationExceptionProperties());
+    }
+
+    public GlobalExceptionHandler(MessageSource messageSource, ValidationExceptionProperties properties) {
         this.messageSource = messageSource;
         this.messages = new ErrorMessages(messageSource);
+        this.values = new Violations(messages, properties.getSensitiveFields());
+    }
+
+    /**
+     * A query or path parameter of the wrong type is reported like a body field of the wrong type:
+     * with its {@code path}, the {@code expectedType} in OpenAPI terms, and the {@code invalidValue}
+     * unless the parameter is sensitive.
+     */
+    @Override
+    protected ResponseEntity<Object> handleTypeMismatch(
+            TypeMismatchException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        var name = ex instanceof MethodArgumentTypeMismatchException matme ? matme.getName() : ex.getPropertyName();
+        var expectedType = OpenApiTypes.of(ex.getRequiredType());
+        if (name == null || expectedType == null) {
+            return super.handleTypeMismatch(ex, headers, status, request);
+        }
+        var path = "$." + name;
+        var exposed = values.exposes(path, ex.getValue());
+        var detail = exposed
+                ? messages.get("error.parameter-type-mismatch.detail", ex.getValue(), name, expectedType)
+                : messages.get("error.parameter-type-mismatch.detail.hidden", name, expectedType);
+        // The detail can still be overridden with Spring's own message code for this exception;
+        // such an override gets the value only when it may be returned.
+        var body = createProblemDetail(ex, status, detail, null,
+                new Object[]{name, exposed ? ex.getValue() : null, expectedType}, request);
+        body.setProperty("path", path);
+        if (exposed) {
+            body.setProperty("invalidValue", ex.getValue() != null ? String.valueOf(ex.getValue()) : null);
+        }
+        body.setProperty("expectedType", expectedType);
+        return handleExceptionInternal(ex, body, headers, status, request);
+    }
+
+    /**
+     * A missing required query parameter names its {@code path} and, when known, the
+     * {@code expectedType} in OpenAPI terms.
+     */
+    @Override
+    protected ResponseEntity<Object> handleMissingServletRequestParameter(
+            MissingServletRequestParameterException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        ex.getBody().setProperty("path", "$." + ex.getParameterName());
+        var parameter = ex.getMethodParameter();
+        if (parameter != null) {
+            ex.getBody().setProperty("expectedType", OpenApiTypes.of(parameter.getNestedParameterType()));
+        }
+        return super.handleMissingServletRequestParameter(ex, headers, status, request);
     }
 
     @Override
@@ -115,7 +172,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         if (statusCode.is5xxServerError()) {
             log.error("Unexpected error handling request, responding {} {}", statusCode.value(), code, ex);
         } else {
-            log.warn("{} {}: {}", statusCode.value(), code, ex.getMessage());
+            log.warn("{} {}: {}", statusCode.value(), code, Causes.describe(ex));
             log.trace("Stack trace:", ex);
         }
         var result = super.handleExceptionInternal(ex, body, headers, statusCode, request);
@@ -132,7 +189,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
      */
     @ExceptionHandler(MultipartException.class)
     public ResponseEntity<ProblemDetail> handleMultipart(MultipartException ex) {
-        log.warn("{} {}: {}", HttpStatus.BAD_REQUEST.value(), ErrorCode.MALFORMED_MULTIPART_REQUEST, ex.getMessage());
+        log.warn("{} {}: {}", HttpStatus.BAD_REQUEST.value(), ErrorCode.MALFORMED_MULTIPART_REQUEST, Causes.describe(ex));
         log.trace("Stack trace:", ex);
         var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
                 messages.get("error.malformed-multipart.detail"));
@@ -166,7 +223,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         if (status.is5xxServerError()) {
             log.error("{} {}: Unexpected error", status.value(), code, ex);
         } else {
-            log.warn("{} {}: {}", status.value(), code, ex.getMessage());
+            log.warn("{} {}: {}", status.value(), code, Causes.describe(ex));
             log.trace("Stack trace:", ex);
         }
         var problem = ProblemDetail.forStatus(status);

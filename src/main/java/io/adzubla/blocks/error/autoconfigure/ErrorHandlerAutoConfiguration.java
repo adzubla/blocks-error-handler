@@ -63,8 +63,9 @@ public class ErrorHandlerAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnBooleanProperty(name = "blocks.error.global.enabled", matchIfMissing = true)
-    GlobalExceptionHandler globalExceptionHandler(MessageSource messageSource) {
-        return new GlobalExceptionHandler(messageSource);
+    GlobalExceptionHandler globalExceptionHandler(MessageSource messageSource,
+                                                  ValidationExceptionProperties properties) {
+        return new GlobalExceptionHandler(messageSource, properties);
     }
 
     // Separate configuration classes, so the bean methods (whose signatures name optional types) are

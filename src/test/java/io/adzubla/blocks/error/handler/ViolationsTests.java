@@ -18,7 +18,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class ViolationsTests {
 
-    private final Violations violations = new Violations(new ValidationExceptionProperties().getSensitiveFields());
+    private static final ErrorMessages MESSAGES =
+            new ErrorMessages(new org.springframework.context.support.StaticMessageSource());
+
+    private final Violations violations = new Violations(MESSAGES, new ValidationExceptionProperties().getSensitiveFields());
 
     enum Color {RED}
 
@@ -78,7 +81,7 @@ class ViolationsTests {
 
     @Test
     void configuredWords_areNormalizedLikeThePath() {
-        var custom = new Violations(List.of("Credit-Card"));
+        var custom = new Violations(MESSAGES, List.of("Credit-Card"));
 
         assertThat(custom.of("$.creditCard", "4111", "bad")).containsOnlyKeys("path", "message");
         assertThat(custom.of("$.credit_card_number", "4111", "bad")).containsOnlyKeys("path", "message");
@@ -87,8 +90,52 @@ class ViolationsTests {
 
     @Test
     void blankWord_doesNotHideEveryValue() {
-        var custom = new Violations(List.of("", " ", "-"));
+        var custom = new Violations(MESSAGES, List.of("", " ", "-"));
 
         assertThat(custom.of("$.name", "x", "bad")).containsEntry("invalidValue", "x");
+    }
+
+    @Test
+    void bindingFailure_namesTheExpectedOpenApiType() {
+        var error = new org.springframework.validation.FieldError("form", "age", "abc", true, null, null,
+                "Failed to convert property value of type 'java.lang.String' to required type 'int'");
+        error.wrap(new org.springframework.beans.TypeMismatchException("abc", int.class));
+
+        assertThat(violations.of("$", error))
+                .containsEntry("invalidValue", "abc")
+                .containsEntry("expectedType", "integer (int32)")
+                .containsEntry("message", "Invalid value — expected integer (int32)");
+    }
+
+    @Test
+    void bindingFailure_withoutAKnownType_getsAGenericMessage() {
+        var error = new org.springframework.validation.FieldError("form", "age", "abc", true, null, null,
+                "Failed to convert property value of type 'java.lang.String' to required type 'int'");
+
+        assertThat(violations.of("$", error))
+                .containsEntry("path", "$.age")
+                .containsEntry("invalidValue", "abc")
+                .containsEntry("message", "Invalid value");
+    }
+
+    @Test
+    void summary_listsPathsMessagesAndRejectedValues() {
+        var summary = Violations.summary(List.of(
+                violations.of("$.name", "", "must not be blank"),
+                violations.of("$.price", -1, "must be greater than 0"),
+                violations.of("$.stock", null, "must not be null")));
+
+        assertThat(summary).isEqualTo("$.name: must not be blank (rejected value: ''); "
+                + "$.price: must be greater than 0 (rejected value: '-1'); "
+                + "$.stock: must not be null (rejected value: null)");
+    }
+
+    @Test
+    void summary_leavesOutSensitiveAndComplexValues() {
+        var summary = Violations.summary(List.of(
+                violations.of("$.password", "hunter2", "too short"),
+                violations.of("$.items", List.of("hunter2"), "too many")));
+
+        assertThat(summary).isEqualTo("$.password: too short; $.items: too many");
     }
 }

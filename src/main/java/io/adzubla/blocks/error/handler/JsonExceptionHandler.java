@@ -35,7 +35,8 @@ import java.util.Map;
  *
  * <p>Handles {@link org.springframework.http.converter.HttpMessageNotReadableException} by
  * inspecting its cause, adding field path, rejected value, expected type and source location
- * where applicable:
+ * where applicable. The expected type is named as in an OpenAPI schema ({@code integer (int32)},
+ * {@code string (date)}, {@code object}), never by its Java class (see {@link OpenApiTypes}):
  *
  * <ul>
  *   <li>{@code PropertyBindingException} (unrecognized or ignored property) → {@code UNKNOWN_JSON_FIELD}
@@ -193,7 +194,7 @@ public class JsonExceptionHandler {
         }
 
         log.debug("{} {}: Unreadable request body: {}",
-                HttpStatus.BAD_REQUEST.value(), ErrorCode.MALFORMED_REQUEST_BODY, ex.getMessage());
+                HttpStatus.BAD_REQUEST.value(), ErrorCode.MALFORMED_REQUEST_BODY, Causes.describe(ex));
         log.trace("Stack trace:", ex);
         var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, msg("error.malformed-body.detail"));
         problem.setTitle(msg("error.malformed-body.title"));
@@ -215,8 +216,8 @@ public class JsonExceptionHandler {
     private JsonProblem coercionError(InputCoercionException ex) {
         var loc = ex.getLocation();
         var targetType = ex.getTargetType();
-        var typeName = targetType != null ? targetType.getSimpleName() : "?";
-        var range = NUMERIC_RANGES.get(targetType);
+        var typeName = typeName(targetType);
+        var range = targetType != null ? NUMERIC_RANGES.get(targetType) : null;
         Integer line = loc != null ? loc.getLineNr() : null;
         Integer column = loc != null ? loc.getColumnNr() : null;
         String detail;
@@ -230,7 +231,7 @@ public class JsonExceptionHandler {
             detail = msg("error.integer-overflow.detail", typeName);
         }
         return new JsonProblem(msg("error.integer-overflow.title"), detail,
-                null, null, typeName, null, range, line, column, ErrorCode.INTEGER_OVERFLOW);
+                null, null, OpenApiTypes.of(targetType), null, range, line, column, ErrorCode.INTEGER_OVERFLOW);
     }
 
     private JsonProblem unrecognizedProperty(PropertyBindingException ex) {
@@ -255,16 +256,15 @@ public class JsonExceptionHandler {
                     .map(this::jsonValue)
                     .toList();
             var detail = msg("error.invalid-enum.detail",
-                    ex.getValue(), targetType.getSimpleName(), path, validValues);
+                    ex.getValue(), typeName(targetType), path, validValues);
             return new JsonProblem(msg("error.invalid-enum.title"), detail,
-                    path, ex.getValue(), targetType.getSimpleName(), validValues, null, null, null,
+                    path, ex.getValue(), OpenApiTypes.of(targetType), validValues, null, null, null,
                     ErrorCode.INVALID_ENUM_VALUE);
         }
 
-        var typeName = targetType != null ? targetType.getSimpleName() : "?";
-        var detail = msg("error.invalid-value.detail", ex.getValue(), typeName, path);
+        var detail = msg("error.invalid-value.detail", ex.getValue(), typeName(targetType), path);
         return new JsonProblem(msg("error.invalid-value.title"), detail,
-                path, ex.getValue(), typeName, null, null, null, null,
+                path, ex.getValue(), OpenApiTypes.of(targetType), null, null, null, null,
                 ErrorCode.INVALID_FIELD_VALUE);
     }
 
@@ -272,9 +272,8 @@ public class JsonExceptionHandler {
         var path = jsonPath(ex.getPath());
         var targetType = ex.getTargetType();
         var detail = msg("error.type-mismatch.detail", path, friendlyTypeName(targetType));
-        var typeName = targetType != null ? targetType.getSimpleName() : null;
         return new JsonProblem(msg("error.type-mismatch.title"), detail,
-                path, null, typeName, null, null, null, null, ErrorCode.TYPE_MISMATCH);
+                path, null, OpenApiTypes.of(targetType), null, null, null, null, ErrorCode.TYPE_MISMATCH);
     }
 
     private JsonProblem invalidNull(InvalidNullException ex) {
@@ -286,19 +285,19 @@ public class JsonExceptionHandler {
     private JsonProblem invalidTypeId(InvalidTypeIdException ex) {
         var path = jsonPath(ex.getPath());
         var base = ex.getBaseType();
-        var baseName = base != null ? base.getRawClass().getSimpleName() : null;
+        var baseType = base != null ? base.getRawClass() : null;
         return new JsonProblem(msg("error.invalid-type-id.title"),
-                msg("error.invalid-type-id.detail", ex.getTypeId(), baseName != null ? baseName : "?", path),
-                path, ex.getTypeId(), baseName, null, null, null, null, ErrorCode.INVALID_TYPE_ID);
+                msg("error.invalid-type-id.detail", ex.getTypeId(), typeName(baseType), path),
+                path, ex.getTypeId(), OpenApiTypes.of(baseType), null, null, null, null, ErrorCode.INVALID_TYPE_ID);
     }
 
     private JsonProblem valueInstantiation(ValueInstantiationException ex) {
         var path = jsonPath(ex.getPath());
         var type = ex.getType();
-        var typeName = type != null ? type.getRawClass().getSimpleName() : "?";
+        var rawType = type != null ? type.getRawClass() : null;
         return new JsonProblem(msg("error.invalid-value.title"),
-                msg("error.invalid-instance.detail", typeName, path),
-                path, null, typeName, null, null, null, null, ErrorCode.INVALID_FIELD_VALUE);
+                msg("error.invalid-instance.detail", typeName(rawType), path),
+                path, null, OpenApiTypes.of(rawType), null, null, null, null, ErrorCode.INVALID_FIELD_VALUE);
     }
 
     private String jsonValue(Object enumConstant) {
@@ -323,11 +322,18 @@ public class JsonExceptionHandler {
         return sb.toString();
     }
 
+    // The type as named in a detail message: its OpenAPI name, never the Java class name.
+    private static String typeName(Class<?> type) {
+        var name = OpenApiTypes.of(type);
+        return name != null ? name : "?";
+    }
+
     private String friendlyTypeName(Class<?> type) {
-        if (type == null) return msg("error.friendly-type.compatible");
-        if (List.class.isAssignableFrom(type) || type.isArray()) return msg("error.friendly-type.array");
-        if (Map.class.isAssignableFrom(type)) return msg("error.friendly-type.object");
-        return type.getSimpleName();
+        var name = OpenApiTypes.of(type);
+        if (name == null) return msg("error.friendly-type.compatible");
+        if (name.equals(OpenApiTypes.ARRAY)) return msg("error.friendly-type.array");
+        if (name.equals(OpenApiTypes.OBJECT)) return msg("error.friendly-type.object");
+        return name;
     }
 
     private static ResponseEntity<ProblemDetail> badRequest(ProblemDetail problem) {

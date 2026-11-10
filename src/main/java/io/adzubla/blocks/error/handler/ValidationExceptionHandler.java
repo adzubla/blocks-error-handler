@@ -50,6 +50,8 @@ import java.util.Map;
  *       an object-level or cross-parameter constraint, and for a sensitive field (see
  *       {@link ValidationExceptionProperties})
  *   <li>{@code message} — the constraint violation message
+ *   <li>{@code expectedType} — only for a value that can't be converted to the field's type: the
+ *       expected type, named as in an OpenAPI schema
  * </ul>
  *
  * <p>A violation on a controller's <em>return value</em> means the server produced invalid data,
@@ -67,7 +69,7 @@ public class ValidationExceptionHandler {
 
     public ValidationExceptionHandler(MessageSource messageSource, ValidationExceptionProperties properties) {
         this.messages = new ErrorMessages(messageSource);
-        this.violationMapper = new Violations(properties.getSensitiveFields());
+        this.violationMapper = new Violations(messages, properties.getSensitiveFields());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -77,8 +79,9 @@ public class ValidationExceptionHandler {
                 .map(error -> violationMapper.of("$", error))
                 .toList();
 
-        log.debug("{} {}: Validation failed with {} violation(s)",
-                HttpStatus.UNPROCESSABLE_CONTENT.value(), ErrorCode.VALIDATION_FAILED, violations.size());
+        log.debug("{} {}: Validation failed with {} violation(s): {}",
+                HttpStatus.UNPROCESSABLE_CONTENT.value(), ErrorCode.VALIDATION_FAILED, violations.size(),
+                Violations.summary(violations));
         log.trace("Stack trace:", ex);
         return unprocessable(violations);
     }
@@ -104,8 +107,9 @@ public class ValidationExceptionHandler {
             return returnValueViolation(ex);
         }
         var violations = violationMapper.of(result);
-        log.debug("{} {}: Method validation failed with {} violation(s)",
-                HttpStatus.UNPROCESSABLE_CONTENT.value(), ErrorCode.VALIDATION_FAILED, violations.size());
+        log.debug("{} {}: Method validation failed with {} violation(s): {}",
+                HttpStatus.UNPROCESSABLE_CONTENT.value(), ErrorCode.VALIDATION_FAILED, violations.size(),
+                Violations.summary(violations));
         log.trace("Stack trace:", ex);
         return unprocessable(violations);
     }

@@ -117,6 +117,23 @@ the cause of an `HttpMessageNotReadableException`.
 
 The 500 responses are logged at `ERROR`.
 
+`expectedType` names the type as an OpenAPI schema would, followed by the format in parentheses when there
+is one, never the Java class:
+
+| Field type in Java                                  | `expectedType`                           |
+|-----------------------------------------------------|------------------------------------------|
+| `boolean`                                           | `boolean`                                |
+| `int`, `long`                                       | `integer (int32)`, `integer (int64)`     |
+| `short`, `byte`, `BigInteger`                       | `integer`                                |
+| `float`, `double`                                   | `number (float)`, `number (double)`      |
+| `BigDecimal`                                        | `number`                                 |
+| `LocalDate`                                         | `string (date)`                          |
+| `Instant`, `OffsetDateTime`, `LocalDateTime`, `Date` | `string (date-time)`                     |
+| `UUID`, `URI`                                       | `string (uuid)`, `string (uri)`          |
+| `String`, an enum, and other simple values          | `string`                                 |
+| A collection or array                               | `array`                                  |
+| Anything else                                       | `object`                                 |
+
 For enums, `validValues` lists each constant the way your `JsonMapper` writes it, so `@JsonProperty`
 and `@JsonValue` names are listed rather than the Java constant names.
 
@@ -124,12 +141,12 @@ and `@JsonValue` names are listed rather than the Java constant names.
 {
   "title": "Invalid enum value",
   "status": 400,
-  "detail": "Cannot deserialize value 'UNKNOWN' as Category at path $.category — valid values: [ELECTRONICS, BOOKS, CLOTHING]",
+  "detail": "Invalid value 'UNKNOWN' at path $.category — valid values: [ELECTRONICS, BOOKS, CLOTHING]",
   "instance": "/products",
   "code": "INVALID_ENUM_VALUE",
   "path": "$.category",
   "invalidValue": "UNKNOWN",
-  "expectedType": "Category",
+  "expectedType": "string",
   "validValues": ["ELECTRONICS", "BOOKS", "CLOTHING"],
   "traceId": "69fcf2db21f488679d633abb34871dbb"
 }
@@ -179,7 +196,11 @@ Each violation has:
   values are returned, such as strings, numbers, booleans, dates and enums. It is absent for a collection,
   array or object, including a class-level or cross-parameter constraint, so their contents are not returned.
 - **`message`**: the constraint message (see
-  [Validation constraint messages](#83-validation-constraint-messages)).
+  [Validation constraint messages](#83-validation-constraint-messages)). A value that can't be converted
+  to the field's type, such as `age=abc` on a form object, gets the message `Invalid value — expected integer (int32)`
+  instead of the conversion error, which names Java types.
+- **`expectedType`**: only for such a value, the type it should have had, named as in
+  [JSON errors](#32-json-request-body-errors).
 
 | Constraint on                            | Example                                     | `path`             |
 |------------------------------------------|---------------------------------------------|--------------------|
@@ -202,9 +223,9 @@ the property replaces the defaults, and leaving it empty returns every simple va
 blocks.error.validation.sensitive-fields=password,passwd,pwd,secret,token,apikey,privatekey,credential
 ```
 
-This only applies to `violations`. A JSON error can still echo a value that couldn't be converted, such as
-a malformed `UUID` in `$.token`, and so can the `detail` of `PARAMETER_TYPE_MISMATCH` for a query or path
-parameter. A database error can echo a stored value (see [Data access errors](#34-data-access-errors)).
+This applies to `violations`, and to the `invalidValue` and `detail` of `PARAMETER_TYPE_MISMATCH` for a
+query or path parameter. A JSON error can still echo a value that couldn't be converted, such as a malformed
+`UUID` in `$.token`. A database error can echo a stored value (see [Data access errors](#34-data-access-errors)).
 
 **Cross-parameter constraints may not run on their own.** On a controller, or on a service with
 `adapt-constraint-violations=true`, Spring only raises an exception when a parameter also has a violation.
@@ -272,10 +293,10 @@ a missing one and for a row that others still reference.
 | `Content-Type` not accepted                                                                                       | `HttpMediaTypeNotSupportedException`                                              | `UNSUPPORTED_MEDIA_TYPE`      | 415    | none         |
 | Requested `Accept` type unavailable                                                                               | `HttpMediaTypeNotAcceptableException`                                             | `NOT_ACCEPTABLE`              | 406    | none         |
 | No handler or static resource for the path                                                                        | `NoResourceFoundException`, `NoHandlerFoundException`                             | `ROUTE_NOT_FOUND`             | 404    | none         |
-| Required query parameter absent                                                                                   | `MissingServletRequestParameterException`                                         | `MISSING_REQUEST_PARAMETER`   | 400    | none         |
+| Required query parameter absent                                                                                   | `MissingServletRequestParameterException`                                         | `MISSING_REQUEST_PARAMETER`   | 400    | `path`, `expectedType`         |
 | Required multipart part absent                                                                                    | `MissingServletRequestPartException`                                              | `MISSING_REQUEST_PART`        | 400    | none         |
 | Other binding failure, e.g. missing header or cookie                                                              | `ServletRequestBindingException`                                                  | `REQUEST_BINDING_ERROR`       | 400    | none         |
-| Query or path parameter of the wrong type                                                                         | `TypeMismatchException`                                                           | `PARAMETER_TYPE_MISMATCH`     | 400    | none         |
+| Query or path parameter of the wrong type                                                                         | `TypeMismatchException`                                                           | `PARAMETER_TYPE_MISMATCH`     | 400    | `path`, `invalidValue`, `expectedType`         |
 | Upload exceeds the configured limit                                                                               | `MaxUploadSizeExceededException`                                                  | `PAYLOAD_TOO_LARGE`           | 413    | none         |
 | Multipart body unparsable, or request not multipart                                                               | `MultipartException`                                                              | `MALFORMED_MULTIPART_REQUEST` | 400    | none         |
 | Async request timed out                                                                                           | `AsyncRequestTimeoutException`                                                    | `REQUEST_TIMEOUT`             | 503    | none         |
@@ -417,6 +438,20 @@ who is at fault:
 | `SpringDataExceptionHandler`          | `DEBUG`                                                                                    |
 | `GlobalExceptionHandler`              | `WARN` for 4xx; `ERROR` with stack trace for 5xx and unexpected exceptions                 |
 
+Every handled exception is logged with its cause, so the reason behind a response can be reviewed later:
+
+- The one-line summary names the exception and its message, followed by the type and message of its root
+  cause when it has one, such as the driver's `SQLException` behind a data access exception.
+- Validation errors list each violation's `path`, `message` and rejected value. The value follows the same
+  rules as `invalidValue` in the response, so it is left out for a
+  [sensitive field](#33-validation-errors) and for a collection, array or object.
+- The stack trace is logged with every `ERROR`. For client errors it is logged separately at `TRACE`, by
+  every handler:
+
+```properties
+logging.level.io.adzubla.blocks.error.handler=TRACE
+```
+
 Some logs can contain rejected values, whatever the [sensitive fields](#33-validation-errors) setting:
 
 - `DataExceptionHandler`'s integrity violation logs include the raw database message.
@@ -424,13 +459,7 @@ Some logs can contain rejected values, whatever the [sensitive fields](#33-valid
   parameter of the wrong type.
 - `JsonExceptionHandler`'s `DEBUG` logs include Jackson's message.
 
-Client errors are logged as a one-line summary. For JSON and validation errors, the stack trace is logged
-separately at `TRACE`:
-
-```properties
-logging.level.io.adzubla.blocks.error.handler.JsonExceptionHandler=TRACE
-logging.level.io.adzubla.blocks.error.handler.ValidationExceptionHandler=TRACE
-```
+The validation handlers' `DEBUG` logs include rejected values too, but not those of sensitive fields.
 
 These traces can include rejected values, even for [sensitive fields](#33-validation-errors), so avoid `TRACE`
 in production.
@@ -672,12 +701,12 @@ Errors follow [RFC 9457 Problem Details](https://www.rfc-editor.org/rfc/rfc9457)
 {
   "title": "Invalid enum value",
   "status": 400,
-  "detail": "Cannot deserialize value 'UNKNOWN' as Category at path $.category — valid values: [ELECTRONICS, BOOKS, CLOTHING]",
+  "detail": "Invalid value 'UNKNOWN' at path $.category — valid values: [ELECTRONICS, BOOKS, CLOTHING]",
   "instance": "/products",
   "code": "INVALID_ENUM_VALUE",
   "path": "$.category",
   "invalidValue": "UNKNOWN",
-  "expectedType": "Category",
+  "expectedType": "string",
   "validValues": ["ELECTRONICS", "BOOKS", "CLOTHING"],
   "traceId": "69fcf2db21f488679d633abb34871dbb"
 }
@@ -700,7 +729,7 @@ These fields are all optional, and appear only for some codes (see [Error codes]
 |----------------|------------------|----------|---------------------------------------------------------------|
 | `path`         | string           | Optional | JSONPath of the field in the request, e.g. `$.address.street` |
 | `invalidValue` | string           | Optional | The rejected value. Always a string, e.g. `"-1"`              |
-| `expectedType` | string           | Optional | Name of the type the API expected                             |
+| `expectedType` | string           | Optional | The expected type, as in OpenAPI, e.g. `integer (int32)`      |
 | `validValues`  | array of strings | Optional | The accepted values, or the known field names                 |
 | `validRange`   | string           | Optional | The accepted numeric range, e.g. `[-2147483648, 2147483647]`  |
 | `line`         | number           | Optional | Line of the problem in the request body                       |
@@ -713,6 +742,7 @@ Each `violations` entry has:
 |----------------|----------------|----------|--------------------------------------------------------------------------------------------------|
 | `path`         | string         | Always   | Location in the request: a body field, or a query or path parameter. `$` means the whole request |
 | `invalidValue` | string or null | Optional | The rejected value, `null` if the value was null, and absent for a list, object or secret        |
+| `expectedType` | string         | Optional | Only for a value of the wrong type: the expected type, as in OpenAPI, e.g. `integer (int32)`     |
 | `message`      | string         | Always   | Why the value was rejected. May be translated                                                    |
 
 ```json
@@ -776,8 +806,8 @@ that lists them.
 | The route doesn't support this HTTP method                    | `METHOD_NOT_ALLOWED`          | 405    | none           |
 | The API can't produce the type asked for in `Accept`          | `NOT_ACCEPTABLE`              | 406    | none           |
 | The API doesn't accept this `Content-Type`                    | `UNSUPPORTED_MEDIA_TYPE`      | 415    | none           |
-| A required query parameter is missing                         | `MISSING_REQUEST_PARAMETER`   | 400    | none           |
-| A query or path parameter has the wrong type                  | `PARAMETER_TYPE_MISMATCH`     | 400    | none           |
+| A required query parameter is missing                         | `MISSING_REQUEST_PARAMETER`   | 400    | `path`, `expectedType`           |
+| A query or path parameter has the wrong type                  | `PARAMETER_TYPE_MISMATCH`     | 400    | `path`, `invalidValue`, `expectedType`           |
 | The request can't be bound, e.g. a required header is missing | `REQUEST_BINDING_ERROR`       | 400    | none           |
 | The sort parameter names an unknown property                  | `INVALID_PROPERTY_REFERENCE`  | 400    | `invalidValue` |
 | A required part of a multipart request is missing             | `MISSING_REQUEST_PART`        | 400    | none           |

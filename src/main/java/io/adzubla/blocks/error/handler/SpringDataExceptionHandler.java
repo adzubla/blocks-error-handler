@@ -42,8 +42,8 @@ public class SpringDataExceptionHandler {
 
     @ExceptionHandler(PropertyReferenceException.class)
     public ResponseEntity<ProblemDetail> handlePropertyReference(PropertyReferenceException ex) {
-        log.debug("{} {}: Unknown property '{}' on {}", HttpStatus.BAD_REQUEST.value(),
-                ErrorCode.INVALID_PROPERTY_REFERENCE, ex.getPropertyName(), ex.getType());
+        log.debug("{} {}: Unknown property '{}' on {}: {}", HttpStatus.BAD_REQUEST.value(),
+                ErrorCode.INVALID_PROPERTY_REFERENCE, ex.getPropertyName(), ex.getType(), Causes.describe(ex));
         log.trace("Stack trace:", ex);
         var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
                 messages.get("error.invalid-property.detail", ex.getPropertyName()));

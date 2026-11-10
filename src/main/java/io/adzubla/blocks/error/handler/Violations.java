@@ -1,6 +1,7 @@
 package io.adzubla.blocks.error.handler;
 
 import org.springframework.beans.BeanUtils;
+import org.springframework.beans.TypeMismatchException;
 import org.springframework.context.MessageSourceResolvable;
 import org.springframework.validation.FieldError;
 import org.springframework.validation.ObjectError;
@@ -27,12 +28,18 @@ import java.util.Map;
  * <p>It is also absent, whatever the value, for a field whose path contains one of the configured
  * sensitive words (see {@link ValidationExceptionProperties#getSensitiveFields()}). The whole path
  * is checked, so {@code $.credentials.pin} and a map key in {@code $.attributes[token]} count too.
+ *
+ * <p>{@code message} is the constraint's message, except for a binding failure (a value that can't
+ * be converted to the field's type), which gets a generic message instead of the conversion error,
+ * and an {@code expectedType} named as in an OpenAPI schema (see {@link OpenApiTypes}).
  */
 final class Violations {
 
+    private final ErrorMessages messages;
     private final List<String> sensitiveWords;
 
-    Violations(List<String> sensitiveFields) {
+    Violations(ErrorMessages messages, List<String> sensitiveFields) {
+        this.messages = messages;
         this.sensitiveWords = sensitiveFields.stream()
                 .map(Violations::normalize)
                 // A blank word would be contained in every path, hiding every value.
@@ -44,13 +51,54 @@ final class Violations {
      * Entry for a binding error below {@code root}.
      */
     Map<String, String> of(String root, ObjectError error) {
-        return error instanceof FieldError fe
-                ? of(root + "." + fe.getField(), fe.getRejectedValue(), fe.getDefaultMessage())
-                : withoutValue(root, error.getDefaultMessage());
+        if (!(error instanceof FieldError fe)) {
+            return withoutValue(root, error.getDefaultMessage());
+        }
+        var path = root + "." + fe.getField();
+        if (!fe.isBindingFailure()) {
+            return of(path, fe.getRejectedValue(), fe.getDefaultMessage());
+        }
+        // A binding failure (a value that can't be converted to the field's type) carries the
+        // conversion exception's text as its default message, naming Java types the client has no
+        // business seeing: report the expected type in OpenAPI terms instead.
+        var expectedType = expectedType(fe);
+        var violation = of(path, fe.getRejectedValue(), expectedType != null
+                ? messages.get("error.validation-failed.binding-failure.expected", expectedType)
+                : messages.get("error.validation-failed.binding-failure"));
+        if (expectedType != null) {
+            violation.put("expectedType", expectedType);
+        }
+        return violation;
+    }
+
+    private static String expectedType(FieldError error) {
+        return error.contains(TypeMismatchException.class)
+                ? OpenApiTypes.of(error.unwrap(TypeMismatchException.class).getRequiredType())
+                : null;
+    }
+
+    /**
+     * One-line summary of the violations for the log: each path with its message and rejected
+     * value. The value follows the same rules as the response, so it is left out for a sensitive
+     * field and for a complex value.
+     */
+    static String summary(List<Map<String, String>> violations) {
+        return violations.stream()
+                .map(Violations::summary)
+                .collect(java.util.stream.Collectors.joining("; "));
+    }
+
+    private static String summary(Map<String, String> violation) {
+        var summary = violation.get("path") + ": " + violation.get("message");
+        if (!violation.containsKey("invalidValue")) {
+            return summary;
+        }
+        var value = violation.get("invalidValue");
+        return summary + " (rejected value: " + (value != null ? "'" + value + "'" : "null") + ")";
     }
 
     Map<String, String> of(String path, Object invalidValue, String message) {
-        if (isSensitive(path) || (invalidValue != null && !BeanUtils.isSimpleValueType(invalidValue.getClass()))) {
+        if (!exposes(path, invalidValue)) {
             return withoutValue(path, message);
         }
         var violation = new LinkedHashMap<String, String>();
@@ -58,6 +106,15 @@ final class Violations {
         violation.put("invalidValue", invalidValue != null ? String.valueOf(invalidValue) : null);
         violation.put("message", message != null ? message : "");
         return violation;
+    }
+
+    /**
+     * Whether the value rejected at {@code path} may be returned to the client: not for a sensitive
+     * field, nor for a complex value.
+     */
+    boolean exposes(String path, Object invalidValue) {
+        return !isSensitive(path)
+                && (invalidValue == null || BeanUtils.isSimpleValueType(invalidValue.getClass()));
     }
 
     private static Map<String, String> withoutValue(String path, String message) {

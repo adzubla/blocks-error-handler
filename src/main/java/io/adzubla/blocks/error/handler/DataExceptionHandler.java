@@ -168,7 +168,8 @@ public class DataExceptionHandler {
         var constraint = uniqueMatcher.find() ? uniqueMatcher.group(1) : "unknown";
         var key = offendingKey(rootMessage);
         log.warn("{} {}: Duplicate key violation on constraint '{}', column '{}': {}",
-                status.value(), ErrorCode.DUPLICATE_VALUE, constraint, key.column(), rootMessage);
+                status.value(), ErrorCode.DUPLICATE_VALUE, constraint, key.column(), Causes.describe(ex));
+        log.trace("Stack trace:", ex);
         return keyViolation(status, ErrorCode.DUPLICATE_VALUE,
                 "error.duplicate-value.title", "error.duplicate-value.detail", key);
     }
@@ -186,7 +187,8 @@ public class DataExceptionHandler {
             var key = offendingKey(rootMessage);
             log.warn("{} {}: Unique constraint violation on '{}', column '{}': {}",
                     status.value(), ErrorCode.DUPLICATE_VALUE, uniqueFound ? uniqueMatcher.group(1) : "unknown",
-                    key.column(), rootMessage);
+                    key.column(), Causes.describe(ex));
+            log.trace("Stack trace:", ex);
             return keyViolation(status, ErrorCode.DUPLICATE_VALUE,
                     "error.duplicate-value.title", "error.duplicate-value.detail", key);
         }
@@ -199,7 +201,8 @@ public class DataExceptionHandler {
             log.warn("{} {}: Foreign key constraint violation on '{}' ({}), column '{}': {}",
                     status.value(), ErrorCode.REFERENTIAL_INTEGRITY_VIOLATION, fkFound ? fkMatcher.group(1) : "unknown",
                     stillReferenced ? "row still referenced" : "referenced row missing",
-                    key.column(), rootMessage);
+                    key.column(), Causes.describe(ex));
+            log.trace("Stack trace:", ex);
             var detailKey = stillReferenced
                     ? "error.referential-integrity.still-referenced.detail"
                     : "error.referential-integrity.detail";
@@ -209,7 +212,7 @@ public class DataExceptionHandler {
 
         log.warn("{} {}: Unclassified data integrity violation ({}): {}",
                 status.value(), ErrorCode.DATA_INTEGRITY_VIOLATION,
-                ex.getClass().getSimpleName(), rootMessage);
+                ex.getClass().getSimpleName(), Causes.describe(ex));
         log.trace("Stack trace:", ex);
         var problem = ProblemDetail.forStatusAndDetail(status, msg("error.data-integrity.detail"));
         problem.setTitle(msg("error.data-integrity.title"));
@@ -231,7 +234,8 @@ public class DataExceptionHandler {
     @ExceptionHandler(EmptyResultDataAccessException.class)
     public ResponseEntity<ProblemDetail> handleEmptyResult(EmptyResultDataAccessException ex) {
         var status = HttpStatus.NOT_FOUND;
-        log.debug("{} {}: Empty result: {}", status.value(), ErrorCode.RESOURCE_NOT_FOUND, ex.getMessage());
+        log.debug("{} {}: Empty result: {}", status.value(), ErrorCode.RESOURCE_NOT_FOUND, Causes.describe(ex));
+        log.trace("Stack trace:", ex);
         var problem = ProblemDetail.forStatusAndDetail(status, msg("error.resource-not-found.detail"));
         problem.setTitle(msg("error.resource-not-found.title"));
         problem.setProperty("code", ErrorCode.RESOURCE_NOT_FOUND.name());
@@ -242,7 +246,8 @@ public class DataExceptionHandler {
     public ResponseEntity<ProblemDetail> handleOptimisticLockingFailure(OptimisticLockingFailureException ex) {
         var status = HttpStatus.CONFLICT;
         log.warn("{} {}: Optimistic locking failure: {}",
-                status.value(), ErrorCode.OPTIMISTIC_LOCKING_FAILURE, ex.getMessage());
+                status.value(), ErrorCode.OPTIMISTIC_LOCKING_FAILURE, Causes.describe(ex));
+        log.trace("Stack trace:", ex);
         var problem = ProblemDetail.forStatusAndDetail(status, msg("error.optimistic-locking.detail"));
         problem.setTitle(msg("error.optimistic-locking.title"));
         problem.setProperty("code", ErrorCode.OPTIMISTIC_LOCKING_FAILURE.name());

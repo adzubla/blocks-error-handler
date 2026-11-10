@@ -51,7 +51,8 @@ public class JpaExceptionHandler {
 
     @ExceptionHandler(EntityNotFoundException.class)
     public ResponseEntity<ProblemDetail> handleEntityNotFound(EntityNotFoundException ex) {
-        log.debug("{} {}: Entity not found: {}", HttpStatus.NOT_FOUND.value(), ErrorCode.RESOURCE_NOT_FOUND, ex.getMessage());
+        log.debug("{} {}: Entity not found: {}", HttpStatus.NOT_FOUND.value(), ErrorCode.RESOURCE_NOT_FOUND, Causes.describe(ex));
+        log.trace("Stack trace:", ex);
         var problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND,
                 messages.get("error.resource-not-found.detail"));
         problem.setTitle(messages.get("error.resource-not-found.title"));
@@ -65,7 +66,8 @@ public class JpaExceptionHandler {
     }
 
     private ResponseEntity<ProblemDetail> handleEntityNotFoundLike(RuntimeException ex) {
-        log.debug("{} {}: No result: {}", HttpStatus.NOT_FOUND.value(), ErrorCode.RESOURCE_NOT_FOUND, ex.getMessage());
+        log.debug("{} {}: No result: {}", HttpStatus.NOT_FOUND.value(), ErrorCode.RESOURCE_NOT_FOUND, Causes.describe(ex));
+        log.trace("Stack trace:", ex);
         var problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND,
                 messages.get("error.resource-not-found.detail"));
         problem.setTitle(messages.get("error.resource-not-found.title"));
@@ -76,7 +78,8 @@ public class JpaExceptionHandler {
     @ExceptionHandler(OptimisticLockException.class)
     public ResponseEntity<ProblemDetail> handleOptimisticLock(OptimisticLockException ex) {
         log.warn("{} {}: Optimistic locking failure: {}",
-                HttpStatus.CONFLICT.value(), ErrorCode.OPTIMISTIC_LOCKING_FAILURE, ex.getMessage());
+                HttpStatus.CONFLICT.value(), ErrorCode.OPTIMISTIC_LOCKING_FAILURE, Causes.describe(ex));
+        log.trace("Stack trace:", ex);
         var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
                 messages.get("error.optimistic-locking.detail"));
         problem.setTitle(messages.get("error.optimistic-locking.title"));
@@ -87,7 +90,8 @@ public class JpaExceptionHandler {
     @ExceptionHandler(EntityExistsException.class)
     public ResponseEntity<ProblemDetail> handleEntityExists(EntityExistsException ex) {
         log.warn("{} {}: Entity already exists: {}",
-                HttpStatus.CONFLICT.value(), ErrorCode.DATA_INTEGRITY_VIOLATION, ex.getMessage());
+                HttpStatus.CONFLICT.value(), ErrorCode.DATA_INTEGRITY_VIOLATION, Causes.describe(ex));
+        log.trace("Stack trace:", ex);
         var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
                 messages.get("error.data-integrity.detail"));
         problem.setTitle(messages.get("error.data-integrity.title"));

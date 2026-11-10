@@ -15,6 +15,9 @@ import org.springframework.http.MediaType;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import java.util.UUID;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -43,7 +46,59 @@ class GlobalExceptionHandlerIT {
                 .andExpect(status().isBadRequest())
                 .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value("MISSING_REQUEST_PARAMETER"))
+                .andExpect(jsonPath("$.path").value("$.name"))
+                .andExpect(jsonPath("$.expectedType").value("string"))
                 .andExpect(jsonPath("$.traceId").isString());
+    }
+
+    @Test
+    void missingTypedRequestParam_namesTheOpenApiType() throws Exception {
+        mvc.perform(get("/test/global/page"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("MISSING_REQUEST_PARAMETER"))
+                .andExpect(jsonPath("$.path").value("$.page_size"))
+                .andExpect(jsonPath("$.expectedType").value("integer (int32)"));
+    }
+
+    @Test
+    void queryParamOfTheWrongType_reportsPathValueAndExpectedType() throws Exception {
+        mvc.perform(get("/test/global/page").param("page_size", "abc"))
+                .andDo(print())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("PARAMETER_TYPE_MISMATCH"))
+                .andExpect(jsonPath("$.detail").value("Invalid value 'abc' for parameter 'page_size' — expected integer (int32)"))
+                .andExpect(jsonPath("$.path").value("$.page_size"))
+                .andExpect(jsonPath("$.invalidValue").value("abc"))
+                .andExpect(jsonPath("$.expectedType").value("integer (int32)"));
+    }
+
+    @Test
+    void queryParamOfTheWrongType_isTranslated() throws Exception {
+        mvc.perform(get("/test/global/page").param("page_size", "abc").header("Accept-Language", "pt-BR"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("Valor inválido 'abc' para o parâmetro 'page_size' — esperado integer (int32)"));
+    }
+
+    @Test
+    void pathVariableOfTheWrongType_reportsPathValueAndExpectedType() throws Exception {
+        mvc.perform(get("/test/global/items/not-a-uuid"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("PARAMETER_TYPE_MISMATCH"))
+                .andExpect(jsonPath("$.path").value("$.id"))
+                .andExpect(jsonPath("$.invalidValue").value("not-a-uuid"))
+                .andExpect(jsonPath("$.expectedType").value("string (uuid)"));
+    }
+
+    @Test
+    void sensitiveParamOfTheWrongType_doesNotEchoTheValue() throws Exception {
+        mvc.perform(get("/test/global/reset").param("token", "hunter2"))
+                .andDo(print())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("PARAMETER_TYPE_MISMATCH"))
+                .andExpect(jsonPath("$.detail").value("Invalid value for parameter 'token' — expected string (uuid)"))
+                .andExpect(jsonPath("$.path").value("$.token"))
+                .andExpect(jsonPath("$.invalidValue").doesNotExist())
+                .andExpect(jsonPath("$.expectedType").value("string (uuid)"));
     }
 
     @Test
@@ -162,6 +217,21 @@ class GlobalExceptionHandlerIT {
     @RestController
     @RequestMapping("/test/global")
     static class GlobalTestController {
+
+        @GetMapping("/page")
+        String page(@RequestParam("page_size") int pageSize) {
+            return "ok";
+        }
+
+        @GetMapping("/items/{id}")
+        String item(@PathVariable UUID id) {
+            return "ok";
+        }
+
+        @GetMapping("/reset")
+        String reset(@RequestParam UUID token) {
+            return "ok";
+        }
 
         @PostMapping("/need-param")
         void needParam(@RequestParam String name) {

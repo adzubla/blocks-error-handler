@@ -237,7 +237,7 @@ class JsonExceptionHandlerIT {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_ENUM_VALUE"))
                 .andExpect(jsonPath("$.invalidValue").value("12345"))
-                .andExpect(jsonPath("$.detail").value(containsString("value '12345' as Category")));
+                .andExpect(jsonPath("$.detail").value(containsString("Invalid value '12345' at path")));
     }
 
     // --- negative: invalid field value ---
@@ -256,7 +256,7 @@ class JsonExceptionHandlerIT {
                 .andExpect(jsonPath("$.title").value("Invalid field value"))
                 .andExpect(jsonPath("$.path").value("$.price"))
                 .andExpect(jsonPath("$.invalidValue").value("abc"))
-                .andExpect(jsonPath("$.expectedType").value("BigDecimal"))
+                .andExpect(jsonPath("$.expectedType").value("number"))
                 .andExpect(jsonPath("$.traceId").isString());
     }
 
@@ -291,7 +291,7 @@ class JsonExceptionHandlerIT {
                 .andExpect(jsonPath("$.title").value("Invalid field value"))
                 .andExpect(jsonPath("$.path").value("$.weight"))
                 .andExpect(jsonPath("$.invalidValue").value("abc"))
-                .andExpect(jsonPath("$.expectedType").value("Long"))
+                .andExpect(jsonPath("$.expectedType").value("integer (int64)"))
                 .andExpect(jsonPath("$.traceId").isString());
     }
 
@@ -309,7 +309,7 @@ class JsonExceptionHandlerIT {
                 .andExpect(jsonPath("$.title").value("Invalid field value"))
                 .andExpect(jsonPath("$.path").value("$.active"))
                 .andExpect(jsonPath("$.invalidValue").value("abc"))
-                .andExpect(jsonPath("$.expectedType").value("Boolean"))
+                .andExpect(jsonPath("$.expectedType").value("boolean"))
                 .andExpect(jsonPath("$.traceId").isString());
     }
 
@@ -327,7 +327,7 @@ class JsonExceptionHandlerIT {
                 .andExpect(jsonPath("$.title").value("Invalid field value"))
                 .andExpect(jsonPath("$.path").value("$.releaseDate"))
                 .andExpect(jsonPath("$.invalidValue").value("not-a-date"))
-                .andExpect(jsonPath("$.expectedType").value("LocalDate"))
+                .andExpect(jsonPath("$.expectedType").value("string (date)"))
                 .andExpect(jsonPath("$.traceId").isString());
     }
 
@@ -345,7 +345,7 @@ class JsonExceptionHandlerIT {
                 .andExpect(jsonPath("$.title").value("Invalid field value"))
                 .andExpect(jsonPath("$.path").value("$.expiresAt"))
                 .andExpect(jsonPath("$.invalidValue").value("not-a-datetime"))
-                .andExpect(jsonPath("$.expectedType").value("LocalDateTime"))
+                .andExpect(jsonPath("$.expectedType").value("string (date-time)"))
                 .andExpect(jsonPath("$.traceId").isString());
     }
 
@@ -363,7 +363,7 @@ class JsonExceptionHandlerIT {
                 .andExpect(jsonPath("$.title").value("Invalid field value"))
                 .andExpect(jsonPath("$.path").value("$.scheduledAt"))
                 .andExpect(jsonPath("$.invalidValue").value("not-an-instant"))
-                .andExpect(jsonPath("$.expectedType").value("Instant"))
+                .andExpect(jsonPath("$.expectedType").value("string (date-time)"))
                 .andExpect(jsonPath("$.traceId").isString());
     }
 
@@ -557,7 +557,7 @@ class JsonExceptionHandlerIT {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("TYPE_MISMATCH"))
                 .andExpect(jsonPath("$.path").value("$.count"))
-                .andExpect(jsonPath("$.expectedType").value("int"));
+                .andExpect(jsonPath("$.expectedType").value("integer (int32)"));
     }
 
     @Test
@@ -611,7 +611,7 @@ class JsonExceptionHandlerIT {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_TYPE_ID"))
                 .andExpect(jsonPath("$.invalidValue").value("fish"))
-                .andExpect(jsonPath("$.expectedType").value("Animal"));
+                .andExpect(jsonPath("$.expectedType").value("object"));
     }
 
     @Test
@@ -622,7 +622,7 @@ class JsonExceptionHandlerIT {
                 .andDo(print())
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_FIELD_VALUE"))
-                .andExpect(jsonPath("$.expectedType").value("PickyRequest"));
+                .andExpect(jsonPath("$.expectedType").value("object"));
     }
 
     @Test

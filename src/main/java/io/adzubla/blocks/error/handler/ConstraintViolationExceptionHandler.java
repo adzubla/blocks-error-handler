@@ -59,7 +59,7 @@ public class ConstraintViolationExceptionHandler {
 
     public ConstraintViolationExceptionHandler(MessageSource messageSource, ValidationExceptionProperties properties) {
         this.messages = new ErrorMessages(messageSource);
-        this.violationMapper = new Violations(properties.getSensitiveFields());
+        this.violationMapper = new Violations(messages, properties.getSensitiveFields());
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
@@ -78,8 +78,9 @@ public class ConstraintViolationExceptionHandler {
                         .thenComparing(v -> v.get("message")))
                 .toList();
 
-        log.debug("{} {}: Constraint violation with {} violation(s)",
-                HttpStatus.UNPROCESSABLE_CONTENT.value(), ErrorCode.VALIDATION_FAILED, violations.size());
+        log.debug("{} {}: Constraint violation with {} violation(s): {}",
+                HttpStatus.UNPROCESSABLE_CONTENT.value(), ErrorCode.VALIDATION_FAILED, violations.size(),
+                Violations.summary(violations));
         log.trace("Stack trace:", ex);
         var problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT,
                 messages.get("error.validation-failed.detail"));
