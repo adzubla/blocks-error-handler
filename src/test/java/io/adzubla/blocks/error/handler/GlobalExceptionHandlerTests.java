@@ -38,6 +38,7 @@ class GlobalExceptionHandlerTests {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(body(response).getProperties()).containsEntry("code", "MALFORMED_REQUEST_BODY");
+        assertThat(body(response).getTitle()).isEqualTo("Malformed request body");
     }
 
     @Test
@@ -51,6 +52,22 @@ class GlobalExceptionHandlerTests {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_CONTENT);
         assertThat(body(response).getStatus()).isEqualTo(422);
         assertThat(body(response).getProperties()).containsEntry("code", "VALIDATION_FAILED");
+        assertThat(body(response).getTitle()).isEqualTo("Validation failed");
+    }
+
+    @Test
+    void titleFromSpringMessageCode_isKept() throws Exception {
+        var springMessages = new StaticMessageSource();
+        springMessages.addMessage("problemDetail.title." + MethodArgumentNotValidException.class.getName(),
+                java.util.Locale.getDefault(), "Bad input");
+        var customised = new GlobalExceptionHandler(new StaticMessageSource());
+        customised.setMessageSource(springMessages);
+        var bindingResult = new BeanPropertyBindingResult(new Object(), "request");
+        var ex = new MethodArgumentNotValidException(parameter(0), bindingResult);
+
+        var response = customised.handleException(ex, request);
+
+        assertThat(body(response).getTitle()).isEqualTo("Bad input");
     }
 
     @Test
@@ -68,6 +85,7 @@ class GlobalExceptionHandlerTests {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
         assertThat(body(response).getProperties()).containsEntry("code", "INTERNAL_SERVER_ERROR");
+        assertThat(body(response).getTitle()).isEqualTo("Internal server error");
     }
 
     private ResponseEntity<Object> handle(Exception ex) throws Exception {

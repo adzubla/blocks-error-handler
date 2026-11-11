@@ -32,6 +32,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest(classes = DemoApplication.class, properties = {
         "blocks.error.validation.enabled=false",
+        "blocks.error.json.enabled=false",
         "blocks.error.spring-data.enabled=false",
         "spring.validation.method.adapt-constraint-violations=true"})
 @AutoConfigureMockMvc
@@ -49,7 +50,32 @@ class DisabledHandlersIT {
                 .andDo(print())
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                // The validation handler's title, not Spring's status text: one title per type.
+                .andExpect(jsonPath("$.type").value("urn:problem-type:validation-failed"))
+                .andExpect(jsonPath("$.title").value("Validation failed"))
                 .andExpect(jsonPath("$.errors").doesNotExist());
+    }
+
+    @Test
+    void malformedJson_returns400MalformedRequestBodyWithTheLibraryTitle() throws Exception {
+        mvc.perform(post("/test/disabled/body")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":"))
+                .andDo(print())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("MALFORMED_REQUEST_BODY"))
+                .andExpect(jsonPath("$.type").value("urn:problem-type:malformed-request-body"))
+                .andExpect(jsonPath("$.title").value("Malformed request body"));
+    }
+
+    @Test
+    void invalidBody_withPtBrLocale_returnsTheTranslatedLibraryTitle() throws Exception {
+        mvc.perform(post("/test/disabled/body")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"\"}")
+                        .header("Accept-Language", "pt-BR"))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.title").value("Falha na validação"));
     }
 
     @Test

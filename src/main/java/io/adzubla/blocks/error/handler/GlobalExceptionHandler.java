@@ -39,6 +39,7 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Stream;
 
@@ -85,6 +86,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             .map(GlobalExceptionHandler::loadOptionalClass)
             .filter(Objects::nonNull)
             .toList();
+
+    // Codes with a title of the library's own, by the message key of that title.
+    private static final Map<String, String> LIBRARY_TITLES = Map.of(
+            ErrorCode.VALIDATION_FAILED.name(), "error.validation-failed.title",
+            ErrorCode.MALFORMED_REQUEST_BODY.name(), "error.malformed-body.title",
+            ErrorCode.INTERNAL_SERVER_ERROR.name(), "error.internal.title");
 
     private final MessageSource messageSource;
     private final ErrorMessages messages;
@@ -180,8 +187,24 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         var result = super.handleExceptionInternal(ex, body, headers, statusCode, request);
         if (result != null && result.getBody() instanceof ProblemDetail pd) {
             pd.setProperty("code", code);
+            useLibraryTitle(pd, code);
         }
         return result;
+    }
+
+    /**
+     * A code that another handler of the library normally answers, reached here only when that handler
+     * is disabled or replaced, gets that handler's title instead of the status text: RFC 9457 expects
+     * one title per problem type, and the type follows the code. A title set through Spring's
+     * {@code problemDetail.title.*} message codes is kept.
+     */
+    private void useLibraryTitle(ProblemDetail pd, String code) {
+        var key = LIBRARY_TITLES.get(code);
+        var status = HttpStatus.resolve(pd.getStatus());
+        if (key != null && (pd.getTitle() == null
+                || (status != null && status.getReasonPhrase().equals(pd.getTitle())))) {
+            pd.setTitle(messages.get(key));
+        }
     }
 
     /**

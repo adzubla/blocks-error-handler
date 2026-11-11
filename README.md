@@ -110,7 +110,9 @@ Errors handled by Spring MVC look like this, plus the extra fields described in 
 `title` and `detail` are for people and can be [translated or reworded](#8-internationalisation-i18n).
 
 `type` is the URI that RFC 9457 uses to identify the kind of problem: a base URI followed by the `code` in
-lower case, with `-` instead of `_`. Point the base at your API documentation to make the types resolvable:
+lower case, with `-` instead of `_`. Point the base at your API documentation to make the types resolvable.
+RFC 9457 then expects each URI to open a page that describes the problem, so publish one per code, for
+example from the [guide for API consumers](#10-guide-for-api-consumers):
 
 ```properties
 # Defaults to urn:problem-type:, which identifies the problem but can't be opened.
@@ -121,6 +123,10 @@ blocks.error.problem-type.base-uri=https://api.example.com/problems/
 `ERROR_RESPONSE` has no `type` of its own, and a `type` already set on an exception is kept (see
 [Exceptions with a declared status](#93-exceptions-with-a-declared-status)). Without a `type`, RFC 9457
 reads it as `about:blank`, and `title` is the HTTP status text.
+
+An empty base removes `type` from every response, but not the library's own titles, such as
+`Validation failed`. RFC 9457 expects the HTTP status text as the title of `about:blank`, so leave the base
+set unless your clients can't handle `type`.
 
 Two kinds of error don't use this format: the 401/403 responses written by
 [Spring Security](#5-spring-security), and errors that don't reach an `@ExceptionHandler`, such as an
@@ -440,10 +446,14 @@ Exceptions a disabled handler would have covered fall through to `GlobalExceptio
 defaults if that is disabled too:
 
 - JSON errors become 400 `MALFORMED_REQUEST_BODY`.
-- Spring MVC validation errors become 422 `VALIDATION_FAILED` with Spring's body, without `errors`. A
+- Spring MVC validation errors become 422 `VALIDATION_FAILED` with Spring's `detail`, without `errors`. A
   `MethodValidationException` becomes 500 `METHOD_VALIDATION_ERROR`, a code that only occurs in this setup.
 - Data access, JPA, `PropertyReferenceException` and `ConstraintViolationException` errors become 500
   `INTERNAL_SERVER_ERROR`.
+
+A code keeps the library's `title` either way, such as `Validation failed` rather than Spring's
+`Unprocessable Content`, because RFC 9457 expects one title per `type`. A title you set through Spring's
+`problemDetail.title.*` message codes is kept.
 
 To customise a handler instead, declare your own bean of the same type, typically a subclass overriding
 one method. The library's bean then backs off:
