@@ -29,7 +29,7 @@ This library replaces that with a single, consistent error contract:
 ### 2.1 Requirements
 
 - Java 17 or later
-- Spring Boot 4.x (tested on 4.0.9) with Jackson 3, Boot's default
+- Spring Boot 4.x (tested on 4.0.10) with Jackson 3, Boot's default
 - A servlet application using `spring-boot-starter-webmvc`. WebFlux is not supported.
 
 ### 2.2 Installation
