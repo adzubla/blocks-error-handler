@@ -160,19 +160,21 @@ The 500 responses are logged at `ERROR`.
 `expectedType` names the type as an OpenAPI schema would, followed by the format in parentheses when there
 is one, never the Java class:
 
-| Field type in Java                                   | `expectedType`                       |
-|------------------------------------------------------|--------------------------------------|
-| `boolean`                                            | `boolean`                            |
-| `int`, `long`                                        | `integer (int32)`, `integer (int64)` |
-| `short`, `byte`, `BigInteger`                        | `integer`                            |
-| `float`, `double`                                    | `number (float)`, `number (double)`  |
-| `BigDecimal`                                         | `number`                             |
-| `LocalDate`                                          | `string (date)`                      |
-| `Instant`, `OffsetDateTime`, `LocalDateTime`, `Date` | `string (date-time)`                 |
-| `UUID`, `URI`                                        | `string (uuid)`, `string (uri)`      |
-| `String`, an enum, and other simple values           | `string`                             |
-| A collection or array                                | `array`                              |
-| Anything else                                        | `object`                             |
+| Field type in Java                                                                | `expectedType`                       |
+|-----------------------------------------------------------------------------------|--------------------------------------|
+| `boolean`                                                                         | `boolean`                            |
+| `int`, `long`                                                                     | `integer (int32)`, `integer (int64)` |
+| `short`, `byte`, `BigInteger`                                                     | `integer`                            |
+| `float`, `double`                                                                 | `number (float)`, `number (double)`  |
+| `BigDecimal`                                                                      | `number`                             |
+| `LocalDate`                                                                       | `string (date)`                      |
+| `Instant`, `OffsetDateTime`, `ZonedDateTime`, `LocalDateTime`, `Date`, `Calendar` | `string (date-time)`                 |
+| `UUID`                                                                            | `string (uuid)`                      |
+| `URI`, `URL`                                                                      | `string (uri)`                       |
+| `byte[]`                                                                          | `string (byte)`                      |
+| `String`, an enum, and other simple values                                        | `string`                             |
+| A collection or any other array                                                   | `array`                              |
+| A `Map`, or anything else                                                         | `object`                             |
 
 For enums, `validValues` lists each constant the way your `JsonMapper` writes it, so `@JsonProperty`
 and `@JsonValue` names are listed rather than the Java constant names.
@@ -372,7 +374,9 @@ When tracing is set up as in [Installation](#22-installation):
 
 - Problem Details bodies from `@ExceptionHandler` methods get `"traceId": "<hex>"`.
 - Responses get an `X-Trace-Id: <hex>` header, success and error alike, including responses written by
-  filters that answer the request themselves, such as a rate limiter.
+  filters that answer the request themselves, such as a rate limiter. That holds for filters that run
+  after the library's own, which is ordered at `Ordered.HIGHEST_PRECEDENCE + 2`, as almost all filters
+  are: a filter ordered before it answers before the trace ID is known, so its response has no header.
 
 The two are configured separately:
 
@@ -446,8 +450,9 @@ Exceptions a disabled handler would have covered fall through to `GlobalExceptio
 defaults if that is disabled too:
 
 - JSON errors become 400 `MALFORMED_REQUEST_BODY`.
-- Spring MVC validation errors become 422 `VALIDATION_FAILED` with Spring's `detail`, without `errors`. A
-  `MethodValidationException` becomes 500 `METHOD_VALIDATION_ERROR`, a code that only occurs in this setup.
+- Spring MVC validation errors become 422 `VALIDATION_FAILED` with Spring's `detail`, without `errors`,
+  except a return-value violation, which stays 500 `INTERNAL_SERVER_ERROR`. A `MethodValidationException`
+  becomes 500 `METHOD_VALIDATION_ERROR`, a code that only occurs in this setup.
 - Data access, JPA, `PropertyReferenceException` and `ConstraintViolationException` errors become 500
   `INTERNAL_SERVER_ERROR`.
 
@@ -480,7 +485,7 @@ who is at fault:
 
 | Logger                                | Level                                                                                      |
 |---------------------------------------|--------------------------------------------------------------------------------------------|
-| `JsonExceptionHandler`                | `DEBUG`; `ERROR` with stack trace for a server-side mapping defect                         |
+| `JsonExceptionHandler`                | `DEBUG`; `ERROR` with stack trace for a missing injectable value                           |
 | `ValidationExceptionHandler`          | `DEBUG`; `ERROR` with stack trace for return-value violations                              |
 | `ConstraintViolationExceptionHandler` | `DEBUG`; `ERROR` with stack trace for return-value violations                              |
 | `DataExceptionHandler`                | `WARN` for integrity violations and optimistic locking failures; `DEBUG` for empty results |
@@ -491,7 +496,8 @@ who is at fault:
 Every handled exception is logged with its cause, so the reason behind a response can be reviewed later:
 
 - The one-line summary names the exception and its message, followed by the type and message of its root
-  cause when it has one, such as the driver's `SQLException` behind a data access exception.
+  cause when it has one, such as the driver's `SQLException` behind a data access exception. JSON errors
+  log Jackson's message instead, or only the field's name for an unknown field.
 - Validation errors list each violation's `path`, `detail` and rejected value. The value follows the same
   rules as `invalidValue` in the response, so it is left out for a
   [sensitive field](#33-validation-errors) and for a collection, array or object.
@@ -503,7 +509,7 @@ logging.level.io.adzubla.blocks.error.handler=TRACE
 ```
 
 These traces can include rejected values, even for [sensitive fields](#33-validation-errors), so avoid `TRACE`
-in production.
+in production. The stack traces logged at `ERROR` can include them too, in exception messages.
 
 Some other logs can contain rejected values too, whatever the sensitive fields setting:
 
@@ -545,7 +551,8 @@ take arguments (`{0}`), write a literal apostrophe as `''`.
 
 The text of Spring MVC errors is Spring's own, other than `MALFORMED_MULTIPART_REQUEST` and the `detail` of
 `PARAMETER_TYPE_MISMATCH`. Spring looks it up in your `MessageSource` under
-`problemDetail.title.<exception class>` and `problemDetail.<exception class>`.
+`problemDetail.title.<exception class>` and `problemDetail.<exception class>`, with the fully qualified class
+name, such as `problemDetail.title.org.springframework.web.HttpRequestMethodNotSupportedException`.
 
 ### 8.2 Locale resolution
 
@@ -564,7 +571,9 @@ spring.web.locale=en
 
 ### 8.3 Validation constraint messages
 
-`errors[].detail` comes from Bean Validation, not from the library's keys above. Hibernate Validator
+`errors[].detail` comes from Bean Validation, not from the library's keys above, except for a value that
+can't be converted to the field's type, which uses `error.validation-failed.binding-failure.expected`
+(see [Validation errors](#33-validation-errors)). Hibernate Validator
 ships translations for many languages, including Portuguese. To override or add messages, put a
 `ValidationMessages_<locale>.properties` file on your classpath. Spring Boot also resolves a `{key}` in a
 constraint message from your `MessageSource`, so those keys can live in `messages*.properties` instead.
